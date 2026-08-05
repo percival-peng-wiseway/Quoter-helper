@@ -9,36 +9,42 @@ export function calculateQuote(
   const pvSize = Math.max(0, finite(inputs.pvSize));
   const battery = settings.batteries.find((item) => Math.abs(item.kwh - inputs.batteryKwh) < 0.001);
   const inverter = settings.inverters.find((item) => item.name === inputs.inverter);
+  const manualCost = (key: keyof QuoteInputs["manualCosts"], fallback: number) => {
+    const override = inputs.manualCosts?.[key];
+    return typeof override === "number" && Number.isFinite(override)
+      ? Math.max(0, override)
+      : fallback;
+  };
   const costs = {
-    solarPanel: settings.panelBatchCost * Math.ceil((pvSize * 1000) / settings.panelBatchWatts),
+    solarPanel: manualCost("solarPanel", settings.panelBatchCost * Math.ceil((pvSize * 1000) / settings.panelBatchWatts)),
     inverter: inverter?.cost ?? 0,
     battery: battery?.cost ?? 0,
-    backup: Math.max(0, finite(inputs.manualCosts.backup)),
-    accessories: pvSize * settings.accessoryCostPerKw,
-    solarInstallation: pvSize * 1000 * settings.solarInstallCostPerWatt,
-    batteryInstallation: settings.batteryInstallCost,
-    delivery: settings.deliveryCost,
-    acCable: Math.max(0, finite(inputs.manualCosts.acCable)),
-    blinkFee: settings.blinkFee,
-    switchboard: Math.max(0, finite(inputs.manualCosts.switchboard)),
-    subSwitchboard: Math.max(0, finite(inputs.manualCosts.subSwitchboard)),
-    externalCommission: Math.max(0, finite(inputs.manualCosts.externalCommission)),
+    backup: manualCost("backup", 0),
+    accessories: manualCost("accessories", pvSize * settings.accessoryCostPerKw),
+    solarInstallation: manualCost("solarInstallation", pvSize * 1000 * settings.solarInstallCostPerWatt),
+    batteryInstallation: manualCost("batteryInstallation", settings.batteryInstallCost),
+    delivery: manualCost("delivery", settings.deliveryCost),
+    acCable: manualCost("acCable", 0),
+    blinkFee: manualCost("blinkFee", settings.blinkFee),
+    switchboard: manualCost("switchboard", 0),
+    subSwitchboard: manualCost("subSwitchboard", 0),
+    externalCommission: manualCost("externalCommission", 0),
   };
 
   const definitions: Array<[keyof typeof costs, string, boolean, string?]> = [
-    ["solarPanel", "Solar panels", false, `${settings.panelBatchWatts}W panel batches`],
+    ["solarPanel", "Solar Panel", true, `${settings.panelBatchWatts}W panel batches`],
     ["inverter", "Inverter", false],
     ["battery", "Battery", false],
     ["backup", "Backup", true],
-    ["accessories", "Accessories", false, `$${settings.accessoryCostPerKw.toFixed(0)} / kW`],
-    ["solarInstallation", "Solar installation", false, `$${settings.solarInstallCostPerWatt.toFixed(2)} / W`],
-    ["batteryInstallation", "Battery installation", false],
-    ["delivery", "Delivery", false],
+    ["accessories", "Accessories (cables, bracket, etc.)", true, `$${settings.accessoryCostPerKw.toFixed(0)} / kW`],
+    ["solarInstallation", "Solar Installation", true, `$${settings.solarInstallCostPerWatt.toFixed(2)} / W`],
+    ["batteryInstallation", "Battery Installation", true],
+    ["delivery", "Delivery", true],
     ["acCable", "AC cable run", true],
-    ["blinkFee", "Blink fee", false],
-    ["switchboard", "Switchboard upgrade", true],
-    ["subSwitchboard", "Sub switchboard", true],
-    ["externalCommission", "External commission (incl. GST)", true],
+    ["blinkFee", "Blink Fee", true],
+    ["switchboard", "Switchboard Upgrade", true],
+    ["subSwitchboard", "sub switchboard", true],
+    ["externalCommission", "External Commission incl. GST", true],
   ];
 
   const lineItems: LineItemResult[] = definitions.map(([key, label, editableByUser, note]) => ({

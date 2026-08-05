@@ -42,8 +42,14 @@ export type QuoteInputs = {
   solarVicLoan: number;
   discount: number;
   manualCosts: {
+    solarPanel?: number;
     backup: number;
+    accessories?: number;
+    solarInstallation?: number;
+    batteryInstallation?: number;
+    delivery?: number;
     acCable: number;
+    blinkFee?: number;
     switchboard: number;
     subSwitchboard: number;
     externalCommission: number;

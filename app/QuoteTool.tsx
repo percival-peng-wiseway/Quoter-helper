@@ -201,7 +201,7 @@ export function QuoteTool() {
                             return (
                               <tr key={item.key}>
                                 <td><b>{item.label}</b>{item.note && <small>{item.note}</small>}</td>
-                                <td>{item.editableByUser ? <NumberInput compact value={inputs.manualCosts[manualKey]} prefix="$" onChange={(v) => setManualCost(manualKey, v)} /> : <span className="locked-value">{money.format(item.cost)}</span>}</td>
+                                <td>{item.editableByUser ? <NumberInput compact value={item.cost} prefix="$" onChange={(v) => setManualCost(manualKey, v)} /> : <span className="locked-value">{money.format(item.cost)}</span>}</td>
                                 <td><span className="margin-chip">{pct(item.margin)}</span></td>
                                 <td><b>{money.format(item.salesPrice)}</b></td>
                               </tr>
