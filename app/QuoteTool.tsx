@@ -107,8 +107,8 @@ export function QuoteTool() {
   if (!session || !settings || !result || !settingsDraft) {
     return (
       <main className="loading-screen">
-        <div className="brand-mark large">QF</div>
-        <div><strong>QuoteFlow</strong><p>{message || "Syncing the quote model…"}</p></div>
+        <div className="brand-mark large">E3</div>
+        <div><strong>E3 Quoter</strong><p>{message || "Syncing the quote model…"}</p></div>
       </main>
     );
   }
@@ -129,7 +129,7 @@ export function QuoteTool() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">QF</span><span><b>QuoteFlow</b><small>Gross Margin</small></span></div>
+        <div className="brand"><span className="brand-mark">E3</span><span><b>E3 Quoter</b><small>Gross Margin</small></span></div>
         <nav>
           {navItems.filter((item) => !item.admin || isAdmin).map((item) => (
             <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>
@@ -149,8 +149,7 @@ export function QuoteTool() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">FOX ESS · CQ7</span>
-            <h1>{tab === "quote" ? "New gross margin quote" : tab === "history" ? "My quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
+            <h1>{tab === "quote" ? "Quote Table" : tab === "history" ? "My quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
           </div>
           <div className="top-actions">
             {session.viewer.isLocalDemo && (

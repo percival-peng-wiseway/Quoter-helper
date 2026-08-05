@@ -45,7 +45,7 @@ button { cursor: pointer; }
 
 .workspace { min-width: 0; padding: 0 38px 72px; }
 .topbar { min-height: 106px; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 24px 0; }
-.topbar h1 { margin: 4px 0 0; font-size: 30px; letter-spacing: -.04em; }
+.topbar h1 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
 .eyebrow { color: var(--orange-dark); font-size: 12px; font-weight: 800; letter-spacing: .16em; }
 .top-actions { display: flex; align-items: center; gap: 9px; }
 .top-actions button, .primary-btn, .ghost-btn { height: 42px; padding: 0 18px; border-radius: 8px; font-weight: 700; font-size: 14px; }

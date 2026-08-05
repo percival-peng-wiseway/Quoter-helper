@@ -18,15 +18,15 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
-  const title = "QuoteFlow · Gross Margin";
-  const description = "Fox ESS CQ7 quoting and gross margin approval tool";
+  const title = "E3 Quoter · Quote Table";
+  const description = "Quote and gross margin approval tool";
   return {
     metadataBase: new URL(origin),
     title,
     description,
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title, description, images: [{ url: `${origin}/og.png`, width: 1200, height: 630 }] },
-    twitter: { card: "summary_large_image", title, description, images: [`${origin}/og.png`] },
+    openGraph: { title, description, images: [{ url: `${origin}/og-e3-quoter.png`, width: 1200, height: 630 }] },
+    twitter: { card: "summary_large_image", title, description, images: [`${origin}/og-e3-quoter.png`] },
   };
 }
 

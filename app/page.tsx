@@ -4,8 +4,8 @@ import { QuoteTool } from "./QuoteTool";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "QuoteFlow · Gross Margin",
-  description: "Fox ESS CQ7 quoting and gross margin approval tool",
+  title: "E3 Quoter · Quote Table",
+  description: "Quote and gross margin approval tool",
 };
 
 export default function Home() {
