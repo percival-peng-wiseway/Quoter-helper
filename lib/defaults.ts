@@ -61,7 +61,7 @@ export const defaultSettings: AppSettings = {
 };
 
 export const defaultQuote: QuoteInputs = {
-  date: "2026-05-25",
+  date: "",
   customerName: "",
   phone: "",
   address: "",

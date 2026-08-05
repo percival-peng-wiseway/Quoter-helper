@@ -12,10 +12,20 @@ type Tab = "quote" | "history" | "settings" | "users";
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 });
 const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
 const num = (value: string) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const today = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+};
+const freshQuote = (): QuoteInputs => ({
+  ...defaultQuote,
+  date: today(),
+  manualCosts: { ...defaultQuote.manualCosts },
+});
 
 export function QuoteTool() {
   const [session, setSession] = useState<SessionData | null>(null);
-  const [inputs, setInputs] = useState<QuoteInputs>(defaultQuote);
+  const [inputs, setInputs] = useState<QuoteInputs>(() => freshQuote());
   const [settingsDraft, setSettingsDraft] = useState<AppSettings | null>(null);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("quote");
@@ -171,7 +181,7 @@ export function QuoteTool() {
                 </select>
               </label>
             )}
-            <button className="ghost-btn" onClick={() => { setInputs(defaultQuote); setQuoteId(null); }}>Reset</button>
+            <button className="ghost-btn" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
             {tab === "quote" && <button className="primary-btn" disabled={busy} onClick={saveQuote}>{busy ? "Saving…" : "Save quote"}</button>}
             {tab === "settings" && isAdmin && <button className="primary-btn" disabled={busy} onClick={saveSettings}>{busy ? "Publishing…" : "Publish changes"}</button>}
           </div>
