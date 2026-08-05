@@ -163,6 +163,8 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .empty p { max-width: 420px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
 .admin-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.catalog-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.catalog-split > .panel { min-width: 0; padding: 22px; }
 .catalog-table { display: grid; }
 .catalog-head, .catalog-row { display: grid; grid-template-columns: minmax(280px, 1fr) 190px; gap: 16px; align-items: center; padding: 8px 0; border-bottom: 1px solid #e9ece9; }
 .catalog-table.battery .catalog-head, .catalog-table.battery .catalog-row { grid-template-columns: 1fr 1fr 1fr; }
@@ -190,6 +192,7 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   .quote-layout { grid-template-columns: minmax(520px, 1fr) 330px; }
   .workspace { padding-inline: 24px; }
   .admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalog-split { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 1500px) {
@@ -216,7 +219,7 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   .sidebar nav button { padding: 9px; }.sidebar nav button { font-size: 0; }
   .topbar { align-items: flex-end; }.topbar .eyebrow { display: none; }.topbar h1 { font-size: 22px; }
   .top-actions button { padding-inline: 12px; }
-  .form-column > .panel, .standalone, .admin-stack > .panel { padding: 16px; }
+  .form-column > .panel, .standalone, .admin-stack > .panel, .catalog-split > .panel { padding: 16px; }
   .project-columns, .field-grid, .funding-grid, .admin-grid { grid-template-columns: 1fr; }.field.wide { grid-column: auto; }
   .project-column.system-details { padding: 20px 0 0; border-top: 1px solid #e5e8e5; border-left: 0; }
   .summary-column { grid-template-columns: 1fr; }.status-card { grid-row: auto; }

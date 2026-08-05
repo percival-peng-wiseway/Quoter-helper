@@ -324,14 +324,16 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
         <Field label="Solar installation cost / W"><NumberInput value={settings.solarInstallCostPerWatt} prefix="$" onChange={(v) => update({ solarInstallCostPerWatt: v })} /></Field>
       </div>
     </section>
-    <section className="panel standalone">
-      <div className="section-heading"><div><span>B</span><h2>Inverter catalogue</h2></div><small>{settings.inverters.length} models</small></div>
-      <div className="catalog-table"><div className="catalog-head"><span>Model</span><span>Sydney warehouse cost (excl. GST)</span></div>{settings.inverters.map((item, index) => <div className="catalog-row" key={item.name}><input value={item.name} onChange={(e) => { const next = structuredClone(settings); next.inverters[index].name = e.target.value; onChange(next); }} /><NumberInput compact prefix="$" value={item.cost} onChange={(v) => { const next = structuredClone(settings); next.inverters[index].cost = v; onChange(next); }} /></div>)}</div>
-    </section>
-    <section className="panel standalone">
-      <div className="section-heading"><div><span>C</span><h2>CQ7 battery matrix</h2></div><small>Capacity, cost and STC certificates</small></div>
-      <div className="catalog-table battery"><div className="catalog-head"><span>Capacity</span><span>Cost (excl. GST)</span><span>STC certificates</span></div>{settings.batteries.map((item, index) => <div className="catalog-row" key={item.kwh}><NumberInput compact value={item.kwh} suffix="kWh" onChange={(v) => { const next = structuredClone(settings); next.batteries[index].kwh = v; onChange(next); }} /><NumberInput compact prefix="$" value={item.cost} onChange={(v) => { const next = structuredClone(settings); next.batteries[index].cost = v; onChange(next); }} /><NumberInput compact value={item.certificates} onChange={(v) => { const next = structuredClone(settings); next.batteries[index].certificates = v; onChange(next); }} /></div>)}</div>
-    </section>
+    <div className="catalog-split">
+      <section className="panel standalone">
+        <div className="section-heading"><div><span>B</span><h2>Inverter catalogue</h2></div><small>{settings.inverters.length} models</small></div>
+        <div className="catalog-table"><div className="catalog-head"><span>Model</span><span>Sydney warehouse cost (excl. GST)</span></div>{settings.inverters.map((item, index) => <div className="catalog-row" key={item.name}><input value={item.name} onChange={(e) => { const next = structuredClone(settings); next.inverters[index].name = e.target.value; onChange(next); }} /><NumberInput compact prefix="$" value={item.cost} onChange={(v) => { const next = structuredClone(settings); next.inverters[index].cost = v; onChange(next); }} /></div>)}</div>
+      </section>
+      <section className="panel standalone">
+        <div className="section-heading"><div><span>C</span><h2>CQ7 battery matrix</h2></div><small>Capacity, cost and STC certificates</small></div>
+        <div className="catalog-table battery"><div className="catalog-head"><span>Capacity</span><span>Cost (excl. GST)</span><span>STC certificates</span></div>{settings.batteries.map((item, index) => <div className="catalog-row" key={item.kwh}><NumberInput compact value={item.kwh} suffix="kWh" onChange={(v) => { const next = structuredClone(settings); next.batteries[index].kwh = v; onChange(next); }} /><NumberInput compact prefix="$" value={item.cost} onChange={(v) => { const next = structuredClone(settings); next.batteries[index].cost = v; onChange(next); }} /><NumberInput compact value={item.certificates} onChange={(v) => { const next = structuredClone(settings); next.batteries[index].certificates = v; onChange(next); }} /></div>)}</div>
+      </section>
+    </div>
   </div>;
 }
 
