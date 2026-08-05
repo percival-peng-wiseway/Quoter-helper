@@ -1,0 +1,1 @@
+CREATE INDEX `idx_quotes_owner_updated` ON `quotes` (`owner_id`,`updated_at`);
