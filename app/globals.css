@@ -68,6 +68,10 @@ button { cursor: pointer; }
 .section-heading h2 { margin: 0; font-size: 18px; letter-spacing: -.015em; }
 .section-heading small { color: #929992; font-size: 13px; }
 .section-heading.compact { margin-bottom: 13px; }
+.project-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.project-column { display: grid; align-content: start; gap: 15px; min-width: 0; }
+.project-column.system-details { padding-left: 28px; border-left: 1px solid #e5e8e5; }
+.column-label { padding-bottom: 10px; border-bottom: 1px solid #ecefec; color: #929992; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px 18px; }
 .field.wide { grid-column: 1 / -1; }
 .field { display: grid; gap: 7px; min-width: 0; }
@@ -197,7 +201,8 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   .topbar { align-items: flex-end; }.topbar .eyebrow { display: none; }.topbar h1 { font-size: 22px; }
   .top-actions button { padding-inline: 12px; }
   .form-column > .panel, .standalone, .admin-stack > .panel { padding: 16px; }
-  .field-grid, .funding-grid, .admin-grid { grid-template-columns: 1fr; }.field.wide { grid-column: auto; }
+  .project-columns, .field-grid, .funding-grid, .admin-grid { grid-template-columns: 1fr; }.field.wide { grid-column: auto; }
+  .project-column.system-details { padding: 20px 0 0; border-top: 1px solid #e5e8e5; border-left: 0; }
   .summary-column { grid-template-columns: 1fr; }.status-card { grid-row: auto; }
   .catalog-head, .catalog-row, .catalog-table.battery .catalog-head, .catalog-table.battery .catalog-row { grid-template-columns: 1fr; gap: 7px; }
   .catalog-head { display: none; }

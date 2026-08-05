@@ -171,14 +171,20 @@ export function QuoteTool() {
             <div className="form-column">
               <section className="panel project-panel">
                 <div className="section-heading"><div><span>01</span><h2>Project information</h2></div><small>Standard users can edit orange fields</small></div>
-                <div className="field-grid">
-                  <Field label="Date"><input type="date" value={inputs.date} onChange={(e) => setField("date", e.target.value)} /></Field>
-                  <Field label="Customer name"><input value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
-                  <Field label="Project address" wide><input value={inputs.address} placeholder="Enter installation address" onChange={(e) => setField("address", e.target.value)} /></Field>
-                  <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={(v) => setField("pvSize", v)} /></Field>
-                  <Field label="Battery size"><select value={inputs.batteryKwh} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{settings.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
-                  <Field label="Inverter" wide><select value={inputs.inverter} onChange={(e) => setField("inverter", e.target.value)}>{settings.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
-                  <Field label="E³ Energy Initiator" wide><input value={inputs.initiator} placeholder="Enter owner name" onChange={(e) => setField("initiator", e.target.value)} /></Field>
+                <div className="project-columns">
+                  <div className="project-column customer-details">
+                    <div className="column-label">Customer details</div>
+                    <Field label="Date"><input type="date" value={inputs.date} onChange={(e) => setField("date", e.target.value)} /></Field>
+                    <Field label="Customer name"><input value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
+                    <Field label="Project address"><input value={inputs.address} placeholder="Enter installation address" onChange={(e) => setField("address", e.target.value)} /></Field>
+                    <Field label="E³ Energy Initiator"><input value={inputs.initiator} placeholder="Enter owner name" onChange={(e) => setField("initiator", e.target.value)} /></Field>
+                  </div>
+                  <div className="project-column system-details">
+                    <div className="column-label">System configuration</div>
+                    <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={(v) => setField("pvSize", v)} /></Field>
+                    <Field label="Inverter"><select value={inputs.inverter} onChange={(e) => setField("inverter", e.target.value)}>{settings.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
+                    <Field label="Battery size"><select value={inputs.batteryKwh} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{settings.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
+                  </div>
                 </div>
               </section>
 
