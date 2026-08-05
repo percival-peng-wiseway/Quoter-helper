@@ -65,6 +65,13 @@ export type QuoteRecord = {
   updatedAt: string;
 };
 
+export type SystemNotification = {
+  id: string;
+  message: string;
+  createdBy: string;
+  createdAt: string;
+};
+
 export type Viewer = {
   userId: string;
   email: string;

@@ -28,3 +28,14 @@ export const quotes = sqliteTable(
   },
   (table) => [index("idx_quotes_owner_updated").on(table.ownerId, table.updatedAt)],
 );
+
+export const systemNotifications = sqliteTable(
+  "system_notifications",
+  {
+    id: text("id").primaryKey(),
+    message: text("message").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_system_notifications_created").on(table.createdAt)],
+);

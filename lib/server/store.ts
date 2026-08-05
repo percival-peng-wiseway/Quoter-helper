@@ -1,7 +1,7 @@
 import { getChatGPTUser } from "../../app/chatgpt-auth";
 import { getRawDb } from "../../db";
 import { defaultSettings } from "../defaults";
-import type { AppSettings, QuoteInputs, QuoteRecord, Role, Viewer } from "../model";
+import type { AppSettings, QuoteInputs, QuoteRecord, Role, SystemNotification, Viewer } from "../model";
 
 let schemaReady = false;
 
@@ -30,7 +30,14 @@ async function ensureSchema() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS system_notifications (
+      id TEXT PRIMARY KEY,
+      message TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_quotes_owner_updated ON quotes(owner_id, updated_at DESC)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_system_notifications_created ON system_notifications(created_at DESC)"),
   ]);
   schemaReady = true;
 }
@@ -100,10 +107,49 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function updateSettings(viewer: Viewer, settings: AppSettings) {
   if (viewer.role !== "admin") throw new Response("Forbidden", { status: 403 });
-  await getRawDb().prepare(`UPDATE app_settings
+  const db = getRawDb();
+  const previous = await db.prepare("SELECT payload FROM app_settings WHERE id = 1")
+    .first<{ payload: string }>();
+  const previousSettings = previous ? JSON.parse(previous.payload) as AppSettings : defaultSettings;
+  const message = describeSettingsChange(previousSettings, settings);
+  const updates = [db.prepare(`UPDATE app_settings
     SET payload = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1`)
     .bind(JSON.stringify(settings), viewer.userId)
-    .run();
+  ];
+  if (message) {
+    updates.push(db.prepare(`INSERT INTO system_notifications (id, message, created_by)
+      VALUES (?, ?, ?)`)
+      .bind(crypto.randomUUID(), message, viewer.userId));
+  }
+  await db.batch(updates);
+}
+
+function describeSettingsChange(before: AppSettings, after: AppSettings): string | null {
+  const { inverters: beforeInverters, batteries: beforeBatteries, ...beforeParameters } = before;
+  const { inverters: afterInverters, batteries: afterBatteries, ...afterParameters } = after;
+  const changed: string[] = [];
+  if (JSON.stringify(beforeParameters) !== JSON.stringify(afterParameters)) changed.push("Model parameters");
+  if (JSON.stringify(beforeInverters) !== JSON.stringify(afterInverters)) changed.push("Inverter catalogue");
+  if (JSON.stringify(beforeBatteries) !== JSON.stringify(afterBatteries)) changed.push("Battery catalogue");
+  if (changed.length === 0) return null;
+  if (changed.length === 1) return `${changed[0]} updated`;
+  return `${changed.slice(0, -1).join(", ")} and ${changed.at(-1)} updated`;
+}
+
+export async function listNotifications(): Promise<SystemNotification[]> {
+  await ensureSchema();
+  const result = await getRawDb().prepare(`SELECT n.id, n.message, n.created_at,
+      COALESCE(u.display_name, 'Administrator') AS created_by
+    FROM system_notifications n
+    LEFT JOIN users u ON u.user_id = n.created_by
+    ORDER BY n.created_at DESC LIMIT 5`)
+    .all<{ id: string; message: string; created_at: string; created_by: string }>();
+  return result.results.map((row) => ({
+    id: row.id,
+    message: row.message,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function listQuotes(viewer: Viewer): Promise<QuoteRecord[]> {

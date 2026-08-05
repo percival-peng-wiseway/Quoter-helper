@@ -3,15 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
-import type { AppSettings, QuoteInputs, QuoteRecord, Role, Viewer } from "../lib/model";
+import type { AppSettings, QuoteInputs, QuoteRecord, Role, SystemNotification, Viewer } from "../lib/model";
 
 type UserRow = { userId: string; email: string; displayName: string; role: Role; createdAt: string };
-type SessionData = { viewer: Viewer; settings: AppSettings; quotes: QuoteRecord[]; users: UserRow[] };
+type SessionData = { viewer: Viewer; settings: AppSettings; quotes: QuoteRecord[]; users: UserRow[]; notifications: SystemNotification[] };
 type Tab = "quote" | "history" | "settings" | "users";
 
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 });
 const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
 const num = (value: string) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const notificationTime = (value: string) => {
+  const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-AU", { dateStyle: "medium", timeStyle: "short" }).format(date);
+};
 const today = () => {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -147,6 +153,7 @@ export function QuoteTool() {
     { id: "settings", label: "Base data", glyph: "◇", admin: true },
     { id: "users", label: "User access", glyph: "◎", admin: true },
   ];
+  const latestNotification = session.notifications?.[0];
 
   return (
     <div className="app-shell">
@@ -159,8 +166,12 @@ export function QuoteTool() {
             </button>
           ))}
         </nav>
-        <div className="model-note">
-          <span className="dot" /> <div><b>Excel model synced</b><small>Fox ESS CQ7 · Aug</small></div>
+        <div className={`model-note notification-card ${latestNotification ? "has-update" : ""}`}>
+          <span className="dot" />
+          <div>
+            <b>{latestNotification?.message ?? "No new updates"}</b>
+            <small>{latestNotification ? `${latestNotification.createdBy} · ${notificationTime(latestNotification.createdAt)}` : "Admin changes will appear here"}</small>
+          </div>
         </div>
         <div className="sidebar-user">
           <div className="avatar">{session.viewer.displayName.slice(0, 1).toUpperCase()}</div>
