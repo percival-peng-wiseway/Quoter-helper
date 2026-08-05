@@ -140,7 +140,7 @@ export function QuoteTool() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">E3</span><span><b>E3 Quoter</b><small>Gross Margin</small></span></div>
+        <div className="brand"><span className="brand-mark">E3</span><span><b>E3 Quoter</b></span></div>
         <nav>
           {navItems.filter((item) => !item.admin || isAdmin).map((item) => (
             <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>
