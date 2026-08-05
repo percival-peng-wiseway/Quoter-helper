@@ -6,12 +6,12 @@ export async function PUT(request: Request) {
     const viewer = await requireViewer();
     const body = await request.json() as { userId?: string; role?: Role };
     if (!body.userId || !body.role || !["admin", "user"].includes(body.role)) {
-      return Response.json({ error: "用户或角色无效" }, { status: 400 });
+      return Response.json({ error: "Invalid user or role" }, { status: 400 });
     }
     await updateUserRole(viewer, body.userId, body.role);
     return Response.json({ ok: true });
   } catch (error) {
     if (error instanceof Response) return error;
-    return Response.json({ error: error instanceof Error ? error.message : "更新失败" }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to update access" }, { status: 500 });
   }
 }

@@ -44,8 +44,8 @@ async function requestIdentity() {
     return {
       userId: "local-demo-admin",
       email: "admin@local.preview",
-      displayName: "本地管理员",
-      fullName: "本地管理员",
+      displayName: "Local Admin",
+      fullName: "Local Admin",
       isLocalDemo: true,
     };
   }
@@ -127,7 +127,7 @@ export async function saveQuote(viewer: Viewer, id: string | null, payload: Quot
     .first<{ owner_id: string }>();
   if (existing && existing.owner_id !== viewer.userId) throw new Response("Forbidden", { status: 403 });
 
-  const projectName = payload.customerName.trim() || payload.address.trim() || "未命名报价";
+  const projectName = payload.customerName.trim() || payload.address.trim() || "Untitled quote";
   await getRawDb().prepare(`INSERT INTO quotes (id, owner_id, project_name, payload)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET project_name = excluded.project_name,
@@ -155,7 +155,7 @@ export async function listUsers(viewer: Viewer) {
 export async function updateUserRole(viewer: Viewer, userId: string, role: Role) {
   if (viewer.role !== "admin") throw new Response("Forbidden", { status: 403 });
   if (viewer.userId === userId && role !== "admin") {
-    throw new Response("管理员不能取消自己的权限", { status: 400 });
+    throw new Response("You cannot remove your own administrator access", { status: 400 });
   }
   await getRawDb().prepare("UPDATE users SET role = ? WHERE user_id = ?").bind(role, userId).run();
 }

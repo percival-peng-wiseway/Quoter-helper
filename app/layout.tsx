@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const title = "QuoteFlow · Gross Margin";
-  const description = "Fox ESS CQ7 报价与毛利审批工具";
+  const description = "Fox ESS CQ7 quoting and gross margin approval tool";
   return {
     metadataBase: new URL(origin),
     title,
@@ -36,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

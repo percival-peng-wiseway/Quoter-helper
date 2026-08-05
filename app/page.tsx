@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "QuoteFlow · Gross Margin",
-  description: "Fox ESS CQ7 报价与毛利审批工具",
+  description: "Fox ESS CQ7 quoting and gross margin approval tool",
 };
 
 export default function Home() {

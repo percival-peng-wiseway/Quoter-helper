@@ -13,6 +13,6 @@ export async function GET() {
     return Response.json({ viewer, settings, quotes, users });
   } catch (error) {
     if (error instanceof Response) return error;
-    return Response.json({ error: error instanceof Error ? error.message : "加载失败" }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to load data" }, { status: 500 });
   }
 }
