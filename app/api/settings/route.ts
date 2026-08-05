@@ -8,7 +8,14 @@ export async function PUT(request: Request) {
     if (!payload.settings?.inverters?.length || !payload.settings?.batteries?.length) {
       return Response.json({ error: "Equipment catalogues cannot be empty" }, { status: 400 });
     }
-    await updateSettings(viewer, payload.settings);
+    const settings = {
+      ...payload.settings,
+      thresholds: {
+        approval: Math.round(payload.settings.thresholds.approval * 1_000_000) / 1_000_000,
+        target: Math.round(payload.settings.thresholds.target * 1_000_000) / 1_000_000,
+      },
+    };
+    await updateSettings(viewer, settings);
     return Response.json({ ok: true });
   } catch (error) {
     if (error instanceof Response) return error;

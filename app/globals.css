@@ -41,6 +41,7 @@ button { cursor: pointer; transition: border-color .16s ease, background .16s ea
 .notification-card.has-update { border-color: rgba(242,138,58,.28); background: rgba(242,138,58,.08); }
 .notification-card.has-update .dot { background: #ff9c50; box-shadow: 0 0 0 4px rgba(242,138,58,.16); }
 .notification-card > div { min-width: 0; }
+.notification-message { max-height: 170px; overflow-y: auto; white-space: pre-line; line-height: 1.55; scrollbar-width: thin; }
 .model-note b, .sidebar-user b { display: block; font-size: 13px; font-weight: 600; }
 .model-note small, .sidebar-user small { display: block; margin-top: 4px; color: #96a39b; font-size: 11px; line-height: 1.35; }
 .sidebar-user { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; }

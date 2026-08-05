@@ -126,15 +126,75 @@ export async function updateSettings(viewer: Viewer, settings: AppSettings) {
 }
 
 function describeSettingsChange(before: AppSettings, after: AppSettings): string | null {
-  const { inverters: beforeInverters, batteries: beforeBatteries, ...beforeParameters } = before;
-  const { inverters: afterInverters, batteries: afterBatteries, ...afterParameters } = after;
   const changed: string[] = [];
-  if (JSON.stringify(beforeParameters) !== JSON.stringify(afterParameters)) changed.push("Model parameters");
-  if (JSON.stringify(beforeInverters) !== JSON.stringify(afterInverters)) changed.push("Inverter catalogue");
-  if (JSON.stringify(beforeBatteries) !== JSON.stringify(afterBatteries)) changed.push("Battery catalogue");
-  if (changed.length === 0) return null;
-  if (changed.length === 1) return `${changed[0]} updated`;
-  return `${changed.slice(0, -1).join(", ")} and ${changed.at(-1)} updated`;
+  const number = (value: number) => new Intl.NumberFormat("en-AU", { maximumFractionDigits: 4 }).format(value);
+  const money = (value: number) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 2 }).format(value);
+  const percent = (value: number) => `${number(value * 100)}%`;
+  const add = (label: string, oldValue: string | number, newValue: string | number) => {
+    if (oldValue !== newValue) changed.push(`${label}: ${oldValue} → ${newValue}`);
+  };
+
+  add("Senior approval threshold", percent(before.thresholds.approval), percent(after.thresholds.approval));
+  add("Target gross margin", percent(before.thresholds.target), percent(after.thresholds.target));
+
+  const parameters: Array<[keyof AppSettings, string, (value: number) => string]> = [
+    ["gstRate", "GST rate", percent],
+    ["solarStcUnitPrice", "Solar STC unit price", money],
+    ["batteryStcUnitPrice", "Battery STC unit price", money],
+    ["stcScaleFactor", "STC scale factor", number],
+    ["stcYears", "STC years", number],
+    ["panelBatchWatts", "Panel batch watts", number],
+    ["panelBatchCost", "Panel batch cost", money],
+    ["accessoryCostPerKw", "Accessories cost / kW", money],
+    ["solarInstallCostPerWatt", "Solar installation cost / W", money],
+    ["batteryInstallCost", "Battery installation cost", money],
+    ["deliveryCost", "Delivery cost", money],
+    ["blinkFee", "Blink fee", money],
+  ];
+  parameters.forEach(([key, label, format]) => {
+    const oldValue = before[key];
+    const newValue = after[key];
+    if (typeof oldValue === "number" && typeof newValue === "number") add(label, format(oldValue), format(newValue));
+  });
+
+  const marginLabels: Record<string, string> = {
+    solarPanel: "Solar panel margin", inverter: "Inverter margin", battery: "Battery margin",
+    backup: "Backup margin", accessories: "Accessories margin", solarInstallation: "Solar installation margin",
+    batteryInstallation: "Battery installation margin", delivery: "Delivery margin", acCable: "AC cable run margin",
+    blinkFee: "Blink fee margin", switchboard: "Switchboard upgrade margin", subSwitchboard: "Sub switchboard margin",
+    externalCommission: "External commission margin",
+  };
+  new Set([...Object.keys(before.margins), ...Object.keys(after.margins)]).forEach((key) => {
+    add(marginLabels[key] ?? `${key} margin`, percent(before.margins[key] ?? 0), percent(after.margins[key] ?? 0));
+  });
+
+  const inverterCount = Math.max(before.inverters.length, after.inverters.length);
+  for (let index = 0; index < inverterCount; index += 1) {
+    const oldItem = before.inverters[index];
+    const newItem = after.inverters[index];
+    if (!oldItem && newItem) changed.push(`Inverter added: ${newItem.name} (${money(newItem.cost)})`);
+    else if (oldItem && !newItem) changed.push(`Inverter removed: ${oldItem.name} (${money(oldItem.cost)})`);
+    else if (oldItem && newItem) {
+      add(`Inverter ${index + 1} model`, oldItem.name, newItem.name);
+      add(`${newItem.name} cost`, money(oldItem.cost), money(newItem.cost));
+    }
+  }
+
+  const batteryCount = Math.max(before.batteries.length, after.batteries.length);
+  for (let index = 0; index < batteryCount; index += 1) {
+    const oldItem = before.batteries[index];
+    const newItem = after.batteries[index];
+    if (!oldItem && newItem) changed.push(`Battery added: ${newItem.name}`);
+    else if (oldItem && !newItem) changed.push(`Battery removed: ${oldItem.name}`);
+    else if (oldItem && newItem) {
+      add(`Battery ${index + 1} name`, oldItem.name, newItem.name);
+      add(`Battery ${index + 1} capacity`, `${number(oldItem.kwh)} kWh`, `${number(newItem.kwh)} kWh`);
+      add(`Battery ${index + 1} cost`, money(oldItem.cost), money(newItem.cost));
+      add(`Battery ${index + 1} STC certificates`, number(oldItem.certificates), number(newItem.certificates));
+    }
+  }
+
+  return changed.length > 0 ? changed.join("\n") : null;
 }
 
 export async function listNotifications(): Promise<SystemNotification[]> {

@@ -12,6 +12,8 @@ type Tab = "quote" | "history" | "settings" | "users";
 const money = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 });
 const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
 const num = (value: string) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const inputNumber = (value: number) => value === 0 ? "" : String(Math.round((value + Number.EPSILON) * 100_000_000) / 100_000_000);
+const percentageRate = (value: number) => Math.round((value / 100) * 1_000_000) / 1_000_000;
 const notificationTime = (value: string) => {
   const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const date = new Date(normalized);
@@ -192,7 +194,7 @@ export function QuoteTool() {
         <div className={`model-note notification-card ${latestNotification ? "has-update" : ""}`}>
           <span className="dot" />
           <div>
-            <b>{latestNotification?.message ?? "No new updates"}</b>
+            <b className="notification-message">{latestNotification?.message ?? "No new updates"}</b>
             <small>{latestNotification ? `${latestNotification.createdBy} · ${notificationTime(latestNotification.createdAt)}` : "Admin changes will appear here"}</small>
           </div>
         </div>
@@ -376,10 +378,10 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
 
 function NumberInput({ value, onChange, prefix, suffix, compact }: { value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; compact?: boolean }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value === 0 ? "" : String(value));
+  const [draft, setDraft] = useState(inputNumber(value));
 
   useEffect(() => {
-    if (!editing) setDraft(value === 0 ? "" : String(value));
+    if (!editing) setDraft(inputNumber(value));
   }, [editing, value]);
 
   const commit = () => {
@@ -399,9 +401,9 @@ function NumberInput({ value, onChange, prefix, suffix, compact }: { value: numb
     <input
       type="text"
       inputMode="decimal"
-      value={editing ? draft : value === 0 ? "" : String(value)}
+      value={editing ? draft : inputNumber(value)}
       placeholder="-"
-      onFocus={() => { setEditing(true); setDraft(value === 0 ? "" : String(value)); }}
+      onFocus={() => { setEditing(true); setDraft(inputNumber(value)); }}
       onChange={(event) => {
         const next = event.target.value;
         if (!/^-?\d*\.?\d*$/.test(next)) return;
@@ -435,8 +437,8 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
     <section className="panel standalone">
       <div className="section-heading"><div><span>A</span><h2>Model parameters</h2></div><small>Changes affect new calculations for all users</small></div>
       <div className="admin-grid">
-        <Field label="Senior approval threshold"><NumberInput value={settings.thresholds.approval * 100} suffix="%" onChange={(v) => update({ thresholds: { ...settings.thresholds, approval: v / 100 } })} /></Field>
-        <Field label="Target gross margin"><NumberInput value={settings.thresholds.target * 100} suffix="%" onChange={(v) => update({ thresholds: { ...settings.thresholds, target: v / 100 } })} /></Field>
+        <Field label="Senior approval threshold"><NumberInput value={settings.thresholds.approval * 100} suffix="%" onChange={(v) => update({ thresholds: { ...settings.thresholds, approval: percentageRate(v) } })} /></Field>
+        <Field label="Target gross margin"><NumberInput value={settings.thresholds.target * 100} suffix="%" onChange={(v) => update({ thresholds: { ...settings.thresholds, target: percentageRate(v) } })} /></Field>
         <Field label="Solar STC unit price"><NumberInput value={settings.solarStcUnitPrice} prefix="$" onChange={(v) => update({ solarStcUnitPrice: v })} /></Field>
         <Field label="Battery STC unit price"><NumberInput value={settings.batteryStcUnitPrice} prefix="$" onChange={(v) => update({ batteryStcUnitPrice: v })} /></Field>
         <Field label="Battery installation cost"><NumberInput value={settings.batteryInstallCost} prefix="$" onChange={(v) => update({ batteryInstallCost: v })} /></Field>
