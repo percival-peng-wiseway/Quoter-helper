@@ -19,6 +19,7 @@ export function QuoteTool() {
   const [settingsDraft, setSettingsDraft] = useState<AppSettings | null>(null);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("quote");
+  const [quoteSearch, setQuoteSearch] = useState("");
   const [demoRole, setDemoRole] = useState<Role>("admin");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,6 +50,16 @@ export function QuoteTool() {
 
   const settings = session?.settings;
   const result = useMemo(() => settings ? calculateQuote(inputs, settings) : null, [inputs, settings]);
+  const filteredQuotes = useMemo(() => {
+    const query = quoteSearch.trim().toLowerCase();
+    if (!query) return session?.quotes ?? [];
+    return (session?.quotes ?? []).filter((quote) => [
+      quote.projectName,
+      quote.payload.customerName,
+      quote.payload.address,
+      quote.payload.initiator,
+    ].some((value) => value.toLowerCase().includes(query)));
+  }, [quoteSearch, session?.quotes]);
   const role = session?.viewer.isLocalDemo ? demoRole : session?.viewer.role ?? "user";
   const isAdmin = role === "admin";
 
@@ -261,14 +272,25 @@ export function QuoteTool() {
           <section className="panel standalone">
             <div className="section-heading"><div><span>◷</span><h2>Recent quotes</h2></div><small>Only your own records are shown</small></div>
             {session.quotes.length === 0 ? <EmptyState /> : (
-              <div className="history-list">{session.quotes.map((quote) => {
-                const calculated = calculateQuote(quote.payload, settings);
-                return <button key={quote.id} onClick={() => { setQuoteId(quote.id); setInputs(quote.payload); setTab("quote"); }}>
-                  <span><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small></span>
-                  <span><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
-                  <span className="chevron">›</span>
-                </button>;
-              })}</div>
+              <>
+                <label className="history-search">
+                  <span aria-hidden="true">⌕</span>
+                  <input type="search" value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} placeholder="Search by customer name or address" aria-label="Search saved quotes" />
+                  {quoteSearch && <button type="button" onClick={() => setQuoteSearch("")}>Clear</button>}
+                </label>
+                {filteredQuotes.length === 0 ? (
+                  <div className="empty search-empty"><span>⌕</span><h3>No matching quotes</h3><p>Try another customer name, project address or Energy Initiator.</p></div>
+                ) : (
+                  <div className="history-list">{filteredQuotes.map((quote) => {
+                    const calculated = calculateQuote(quote.payload, settings);
+                    return <button key={quote.id} onClick={() => { setQuoteId(quote.id); setInputs(quote.payload); setTab("quote"); }}>
+                      <span><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small></span>
+                      <span><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
+                      <span className="chevron">›</span>
+                    </button>;
+                  })}</div>
+                )}
+              </>
             )}
           </section>
         )}
