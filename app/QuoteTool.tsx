@@ -89,6 +89,22 @@ export function QuoteTool() {
   const setManualCost = (key: keyof QuoteInputs["manualCosts"], value: number) => {
     setInputs((current) => ({ ...current, manualCosts: { ...current.manualCosts, [key]: value } }));
   };
+  const addCustomItem = () => {
+    setInputs((current) => ({
+      ...current,
+      customItems: [...(current.customItems ?? []), { id: crypto.randomUUID(), name: "Custom item", cost: 0, margin: 0.25 }],
+    }));
+  };
+  const updateCustomItem = (id: string, patch: Partial<NonNullable<QuoteInputs["customItems"]>[number]>) => {
+    setInputs((current) => ({
+      ...current,
+      customItems: (current.customItems ?? []).map((item) => item.id === id ? { ...item, ...patch } : item),
+    }));
+  };
+  const removeCustomItem = (id: string) => {
+    setInputs((current) => ({ ...current, customItems: (current.customItems ?? []).filter((item) => item.id !== id) }));
+  };
+  const applyMarginBalance = (value: number) => setField("customerBalance", Math.round(value * 100) / 100);
 
   const flash = (text: string) => {
     setMessage(text);
@@ -259,19 +275,20 @@ export function QuoteTool() {
                 <div className="section-heading"><div><span>02</span><h2>Quote breakdown</h2></div><small>Sales price = cost × (1 + margin)</small></div>
                 <div className="quote-funding-layout">
                   <div className="quote-lines">
-                    <div className="embedded-heading"><b>Quote items</b><small>Cost, margin and sales price</small></div>
+                    <div className="embedded-heading"><b>Quote items</b><div className="quote-items-actions"><small>Cost, margin and sales price</small><button type="button" className="add-item-btn" onClick={addCustomItem}>＋ Add item</button></div></div>
                     <div className="table-wrap">
                       <table className="quote-table">
                         <thead><tr><th>Item</th><th>Cost (excl. GST)</th><th>Margin</th><th>Sales price (excl. GST)</th></tr></thead>
                         <tbody>
                           {result.lineItems.map((item) => {
                             const manualKey = item.key as keyof QuoteInputs["manualCosts"];
+                            const isCustom = Boolean(item.customItemId);
                             return (
                               <tr key={item.key}>
-                                <td><b>{item.label}</b>{item.note && <small>{item.note}</small>}</td>
-                                <td>{item.editableByUser ? <NumberInput compact value={item.cost} prefix="$" onChange={(v) => setManualCost(manualKey, v)} /> : <span className="locked-value">{money.format(item.cost)}</span>}</td>
-                                <td><span className="margin-chip">{pct(item.margin)}</span></td>
-                                <td><b>{money.format(item.salesPrice)}</b></td>
+                                <td>{isCustom ? <input className="custom-item-name" value={item.customItemName ?? ""} placeholder="Item name" aria-label="Custom item name" onChange={(event) => updateCustomItem(item.customItemId!, { name: event.target.value })} /> : <><b>{item.label}</b>{item.note && <small>{item.note}</small>}</>}</td>
+                                <td>{isCustom ? <NumberInput compact value={item.cost} prefix="$" onChange={(v) => updateCustomItem(item.customItemId!, { cost: Math.max(0, v) })} /> : item.editableByUser ? <NumberInput compact value={item.cost} prefix="$" onChange={(v) => setManualCost(manualKey, v)} /> : <span className="locked-value">{money.format(item.cost)}</span>}</td>
+                                <td>{isCustom ? <NumberInput compact value={item.margin * 100} suffix="%" onChange={(v) => updateCustomItem(item.customItemId!, { margin: percentageRate(Math.max(0, v)) })} /> : <span className="margin-chip">{pct(item.margin)}</span>}</td>
+                                <td><div className="sales-cell"><b>{money.format(item.salesPrice)}</b>{isCustom && <button type="button" className="remove-item-btn" aria-label={`Remove ${item.label}`} onClick={() => removeCustomItem(item.customItemId!)}>×</button>}</div></td>
                               </tr>
                             );
                           })}
@@ -287,7 +304,13 @@ export function QuoteTool() {
                       <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
                       <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
                       <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
-                      <Field label="Customer balance (incl. GST)"><NumberInput prefix="$" value={inputs.customerBalance} onChange={(v) => setField("customerBalance", v)} /></Field>
+                      <div className="balance-control">
+                        <Field label="Customer balance (incl. GST)"><NumberInput prefix="$" value={inputs.customerBalance} onChange={(v) => setField("customerBalance", v)} /></Field>
+                        <div className="quick-margin-buttons">
+                          <button type="button" onClick={() => applyMarginBalance(result.margin20RequiredBalance)}><b>20% Margin</b><span>{money.format(result.margin20RequiredBalance)}</span></button>
+                          <button type="button" onClick={() => applyMarginBalance(result.margin15RequiredBalance)}><b>15% Margin</b><span>{money.format(result.margin15RequiredBalance)}</span></button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -340,7 +363,7 @@ export function QuoteTool() {
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
-                    const openQuote = () => { setQuoteId(quote.id); setInputs(quote.payload); setTab("quote"); };
+                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, customItems: quote.payload.customItems ?? [] }); setTab("quote"); };
                     return <div className="history-row" key={quote.id}>
                       <button className="history-main" onClick={openQuote}>
                         <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"}</small></span>

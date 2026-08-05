@@ -73,6 +73,7 @@ export const defaultQuote: QuoteInputs = {
   solarVicRebate: 0,
   solarVicLoan: 0,
   discount: 0,
+  customItems: [],
   manualCosts: {
     backup: 0,
     acCable: 0,

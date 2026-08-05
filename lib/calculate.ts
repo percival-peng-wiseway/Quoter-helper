@@ -47,7 +47,7 @@ export function calculateQuote(
     ["externalCommission", "External Commission incl. GST", true],
   ];
 
-  const lineItems: LineItemResult[] = definitions.map(([key, label, editableByUser, note]) => ({
+  const standardLineItems: LineItemResult[] = definitions.map(([key, label, editableByUser, note]) => ({
     key,
     label,
     cost: costs[key],
@@ -56,6 +56,21 @@ export function calculateQuote(
     editableByUser,
     note,
   }));
+  const customLineItems: LineItemResult[] = (inputs.customItems ?? []).map((item) => {
+    const cost = Math.max(0, finite(item.cost));
+    const margin = Math.max(0, finite(item.margin));
+    return {
+      key: `custom:${item.id}`,
+      label: item.name.trim() || "Custom item",
+      cost,
+      margin,
+      salesPrice: cost * (1 + margin),
+      editableByUser: true,
+      customItemId: item.id,
+      customItemName: item.name,
+    };
+  });
+  const lineItems = [...standardLineItems, ...customLineItems];
 
   const commission = lineItems.find((item) => item.key === "externalCommission")!;
   const normalItems = lineItems.filter((item) => item.key !== "externalCommission");
@@ -77,12 +92,16 @@ export function calculateQuote(
   const grossMargin = totalReceivedExGst - totalCostExGst - netGst;
   const grossMarginRate = totalReceivedExGst === 0 ? 0 : grossMargin / totalReceivedExGst;
 
-  const target = settings.thresholds.target;
-  const denominator = 1 - settings.gstRate - target;
-  const numerator = (1 + settings.gstRate) * (
-    totalCostExGst - gstRefund - fundingTotal * (1 - target)
-  );
-  const targetRequiredBalance = denominator <= 0 ? 0 : Math.max(0, numerator / denominator);
+  const requiredBalanceForMargin = (target: number) => {
+    const denominator = 1 - settings.gstRate - target;
+    const numerator = (1 + settings.gstRate) * (
+      totalCostExGst - gstRefund - fundingTotal * (1 - target)
+    );
+    return denominator <= 0 ? 0 : Math.max(0, numerator / denominator);
+  };
+  const targetRequiredBalance = requiredBalanceForMargin(settings.thresholds.target);
+  const margin15RequiredBalance = requiredBalanceForMargin(0.15);
+  const margin20RequiredBalance = requiredBalanceForMargin(0.2);
   const targetGap = targetRequiredBalance - finite(inputs.customerBalance);
 
   const status = grossMarginRate >= settings.thresholds.target
@@ -106,6 +125,8 @@ export function calculateQuote(
     grossMarginRate,
     quoteRequiredBalance,
     targetRequiredBalance,
+    margin15RequiredBalance,
+    margin20RequiredBalance,
     targetGap,
     status,
   };

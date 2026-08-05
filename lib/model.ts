@@ -43,6 +43,12 @@ export type QuoteInputs = {
   solarVicRebate: number;
   solarVicLoan: number;
   discount: number;
+  customItems?: Array<{
+    id: string;
+    name: string;
+    cost: number;
+    margin: number;
+  }>;
   manualCosts: {
     solarPanel?: number;
     backup: number;
@@ -89,6 +95,8 @@ export type LineItemResult = {
   margin: number;
   salesPrice: number;
   editableByUser: boolean;
+  customItemId?: string;
+  customItemName?: string;
   note?: string;
 };
 
@@ -107,6 +115,8 @@ export type CalculationResult = {
   grossMarginRate: number;
   quoteRequiredBalance: number;
   targetRequiredBalance: number;
+  margin15RequiredBalance: number;
+  margin20RequiredBalance: number;
   targetGap: number;
   status: "healthy" | "review" | "approval";
 };
