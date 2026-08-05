@@ -314,7 +314,46 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
 }
 
 function NumberInput({ value, onChange, prefix, suffix, compact }: { value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; compact?: boolean }) {
-  return <div className={`number-input ${compact ? "compact" : ""}`}>{prefix && <span>{prefix}</span>}<input type="number" step="any" value={value} onChange={(e) => onChange(num(e.target.value))} />{suffix && <span>{suffix}</span>}</div>;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value === 0 ? "" : String(value));
+
+  useEffect(() => {
+    if (!editing) setDraft(value === 0 ? "" : String(value));
+  }, [editing, value]);
+
+  const commit = () => {
+    setEditing(false);
+    const next = Number(draft);
+    if (draft.trim() === "" || !Number.isFinite(next)) {
+      setDraft("");
+      onChange(0);
+      return;
+    }
+    setDraft(next === 0 ? "" : String(next));
+    onChange(next);
+  };
+
+  return <div className={`number-input ${compact ? "compact" : ""}`}>
+    {prefix && <span>{prefix}</span>}
+    <input
+      type="text"
+      inputMode="decimal"
+      value={editing ? draft : value === 0 ? "" : String(value)}
+      placeholder="-"
+      onFocus={() => { setEditing(true); setDraft(value === 0 ? "" : String(value)); }}
+      onChange={(event) => {
+        const next = event.target.value;
+        if (!/^-?\d*\.?\d*$/.test(next)) return;
+        setDraft(next);
+        if (["", "-", ".", "-."].includes(next)) return;
+        const parsed = Number(next);
+        if (Number.isFinite(parsed)) onChange(parsed);
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+    />
+    {suffix && <span>{suffix}</span>}
+  </div>;
 }
 
 function Readout({ label, value, detail }: { label: string; value: string; detail: string }) {

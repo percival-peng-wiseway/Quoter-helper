@@ -83,6 +83,7 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .number-input:focus-within { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(242,140,56,.12); }
 .number-input span { padding: 0 9px; color: #7f8782; font-size: 13px; }
 .number-input input { height: 42px; border: 0; box-shadow: none; padding: 0 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.number-input input::placeholder { color: #9aa19c; opacity: 1; }
 .number-input input:focus { box-shadow: none; }
 .number-input.compact { height: 34px; }
 .number-input.compact input { height: 32px; }
