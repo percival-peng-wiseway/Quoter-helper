@@ -232,7 +232,7 @@ export function QuoteTool() {
                     <Field label="Date"><input type="date" value={inputs.date} onChange={(e) => setField("date", e.target.value)} /></Field>
                     <Field label="Customer name"><input value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
                     <Field label="Phone"><input type="tel" value={inputs.phone ?? ""} placeholder="Enter phone number" onChange={(e) => setField("phone", e.target.value)} /></Field>
-                    <Field label="Project address"><AddressAutocomplete value={inputs.address} onChange={(value) => setField("address", value)} /></Field>
+                    <Field label="Project address"><input value={inputs.address} placeholder="Enter installation address" onChange={(event) => setField("address", event.target.value)} /></Field>
                     <Field label="E³ Energy Initiator"><input value={inputs.initiator} placeholder="Enter owner name" onChange={(e) => setField("initiator", e.target.value)} /></Field>
                   </div>
                   <div className="project-column system-details">
@@ -372,69 +372,6 @@ export function QuoteTool() {
 
 function Field({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
   return <label className={`field ${wide ? "wide" : ""}`}><span>{label}</span>{children}</label>;
-}
-
-function AddressAutocomplete({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [selected, setSelected] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const query = value.trim();
-    if (query.length < 3 || value === selected) {
-      setSuggestions([]);
-      setLoading(false);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setLoading(true);
-      void fetch(`/api/addresses?q=${encodeURIComponent(query)}`, { signal: controller.signal })
-        .then((response) => response.ok ? response.json() as Promise<{ addresses?: string[] }> : { addresses: [] })
-        .then((data) => {
-          setSuggestions(data.addresses ?? []);
-          setOpen(true);
-        })
-        .catch(() => setSuggestions([]))
-        .finally(() => setLoading(false));
-    }, 350);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [selected, value]);
-
-  const choose = (address: string) => {
-    setSelected(address);
-    setSuggestions([]);
-    setOpen(false);
-    onChange(address);
-  };
-
-  return <div className="address-autocomplete">
-    <input
-      value={value}
-      placeholder="Start typing a VIC address"
-      autoComplete="off"
-      role="combobox"
-      aria-autocomplete="list"
-      aria-expanded={open && suggestions.length > 0}
-      aria-controls="vic-address-suggestions"
-      onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
-      onBlur={() => setOpen(false)}
-      onChange={(event) => { setSelected(""); onChange(event.target.value); }}
-    />
-    {loading && <span className="address-search-state">Searching…</span>}
-    {open && suggestions.length > 0 && <div className="address-suggestions" id="vic-address-suggestions" role="listbox">
-      {suggestions.map((address) => <div
-        className="address-option"
-        key={address}
-        role="option"
-        tabIndex={0}
-        onMouseDown={(event) => { event.preventDefault(); choose(address); }}
-        onKeyDown={(event) => { if (event.key === "Enter") choose(address); }}
-      ><span>⌖</span>{address}</div>)}
-      <small className="address-source">Address data: Vicmap · State of Victoria</small>
-    </div>}
-  </div>;
 }
 
 function NumberInput({ value, onChange, prefix, suffix, compact }: { value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; compact?: boolean }) {
