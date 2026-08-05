@@ -203,7 +203,7 @@ export async function listNotifications(): Promise<SystemNotification[]> {
       COALESCE(u.display_name, 'Administrator') AS created_by
     FROM system_notifications n
     LEFT JOIN users u ON u.user_id = n.created_by
-    ORDER BY n.created_at DESC LIMIT 5`)
+    ORDER BY n.created_at DESC LIMIT 20`)
     .all<{ id: string; message: string; created_at: string; created_by: string }>();
   return result.results.map((row) => ({
     id: row.id,

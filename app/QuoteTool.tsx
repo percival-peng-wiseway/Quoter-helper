@@ -178,7 +178,7 @@ export function QuoteTool() {
     { id: "settings", label: "Base data", glyph: "◇", admin: true },
     { id: "users", label: "User access", glyph: "◎", admin: true },
   ];
-  const latestNotification = session.notifications?.[0];
+  const notifications = session.notifications ?? [];
 
   return (
     <div className="app-shell">
@@ -191,12 +191,21 @@ export function QuoteTool() {
             </button>
           ))}
         </nav>
-        <div className={`model-note notification-card ${latestNotification ? "has-update" : ""}`}>
-          <span className="dot" />
-          <div>
-            <b className="notification-message">{latestNotification?.message ?? "No new updates"}</b>
-            <small>{latestNotification ? `${latestNotification.createdBy} · ${notificationTime(latestNotification.createdAt)}` : "Admin changes will appear here"}</small>
-          </div>
+        <div className="notification-feed" aria-label="Administrator updates">
+          {notifications.length > 0 ? notifications.map((notification) => (
+            <div className="model-note notification-card has-update" key={notification.id}>
+              <span className="dot" />
+              <div>
+                <b className="notification-message">{notification.message}</b>
+                <small>{notification.createdBy} · {notificationTime(notification.createdAt)}</small>
+              </div>
+            </div>
+          )) : (
+            <div className="model-note notification-card">
+              <span className="dot" />
+              <div><b>No new updates</b><small>Admin changes will appear here</small></div>
+            </div>
+          )}
         </div>
         <div className="sidebar-user">
           <div className="avatar">{session.viewer.displayName.slice(0, 1).toUpperCase()}</div>

@@ -36,12 +36,13 @@ button { cursor: pointer; transition: border-color .16s ease, background .16s ea
 .sidebar nav button:hover { background: rgba(255,255,255,.055); color: white; }
 .sidebar nav button.active { border-color: rgba(242,138,58,.15); background: rgba(242,138,58,.13); color: #ffb477; box-shadow: inset 3px 0 0 var(--orange); }
 .sidebar nav button span { width: 20px; text-align: center; font-size: 19px; }
-.model-note { display: flex; align-items: flex-start; gap: 11px; margin-top: auto; padding: 14px 13px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; background: rgba(255,255,255,.035); }
+.notification-feed { min-height: 0; flex: 1; display: grid; align-content: start; gap: 10px; margin-top: 18px; padding-right: 4px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
+.model-note { display: flex; align-items: flex-start; gap: 11px; padding: 14px 13px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; background: rgba(255,255,255,.035); }
 .model-note .dot { width: 8px; height: 8px; flex: 0 0 auto; margin-top: 4px; border-radius: 50%; background: #7d8c83; box-shadow: 0 0 0 4px rgba(125,140,131,.1); }
 .notification-card.has-update { border-color: rgba(242,138,58,.28); background: rgba(242,138,58,.08); }
 .notification-card.has-update .dot { background: #ff9c50; box-shadow: 0 0 0 4px rgba(242,138,58,.16); }
 .notification-card > div { min-width: 0; }
-.notification-message { max-height: 170px; overflow-y: auto; white-space: pre-line; line-height: 1.55; scrollbar-width: thin; }
+.notification-message { white-space: pre-line; line-height: 1.55; }
 .model-note b, .sidebar-user b { display: block; font-size: 13px; font-weight: 600; }
 .model-note small, .sidebar-user small { display: block; margin-top: 4px; color: #96a39b; font-size: 11px; line-height: 1.35; }
 .sidebar-user { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; }
@@ -215,7 +216,7 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   .sidebar { padding: 24px 13px; }
   .brand { justify-content: center; padding: 0 0 28px; }.brand > span:last-child, .sidebar nav button:not(.active)::after, .sidebar nav button { font-size: 0; }
   .sidebar nav button { justify-content: center; padding: 11px; }.sidebar nav button span { font-size: 19px; }
-  .model-note, .sidebar-user > div:not(.avatar) { display: none; }.sidebar-user { justify-content: center; padding: 8px 0; }
+  .notification-feed, .sidebar-user > div:not(.avatar) { display: none; }.sidebar-user { justify-content: center; padding: 8px 0; }
   .quote-layout { grid-template-columns: minmax(520px, 1fr) 330px; }
   .workspace { padding-inline: 24px; }
   .admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
