@@ -153,11 +153,13 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .history-search button { position: absolute; right: 8px; height: 34px; padding: 0 11px; border: 0; border-radius: 6px; background: #ecefec; color: #606963; font-size: 12px; font-weight: 700; }
 .history-search button:hover { background: #e2e6e2; }
 .history-list { display: grid; }
-.history-list button { display: grid; grid-template-columns: 1fr auto 24px; align-items: center; gap: 28px; width: 100%; padding: 15px 4px; border: 0; border-bottom: 1px solid #e9ece9; background: transparent; text-align: left; }
+.history-list button { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.2fr) auto 24px; align-items: center; gap: 28px; width: 100%; padding: 15px 4px; border: 0; border-bottom: 1px solid #e9ece9; background: transparent; text-align: left; }
 .history-list button:hover { background: #fafbf9; }
 .history-list b { display: block; font-size: 15px; }
 .history-list small { display: block; margin-top: 5px; color: #8b938d; font-size: 12px; }
-.history-list button > span:nth-child(2) { text-align: right; }
+.history-config { min-width: 0; }
+.history-config b, .history-config small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-margin { text-align: right; }
 .mini-status { display: inline-block !important; margin-left: auto; padding: 3px 6px; border-radius: 4px; width: max-content; }
 .mini-status.healthy { color: var(--green); background: var(--green-soft); }
 .mini-status.review { color: var(--amber); background: var(--amber-soft); }
@@ -220,6 +222,10 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   .form-column, .summary-column { width: 100%; }.summary-column { position: static; order: -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-column .formula-note { display: none; }
   .status-card { grid-row: span 2; }
+  .history-list button { grid-template-columns: minmax(0, 1fr) auto 20px; gap: 14px; }
+  .history-config { grid-column: 1; }
+  .history-margin { grid-column: 2; grid-row: 1 / span 2; }
+  .history-list .chevron { grid-column: 3; grid-row: 1 / span 2; }
 }
 
 @media (max-width: 600px) {

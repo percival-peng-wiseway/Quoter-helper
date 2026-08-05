@@ -57,8 +57,9 @@ export function QuoteTool() {
       quote.projectName,
       quote.payload.customerName,
       quote.payload.address,
+      quote.payload.phone,
       quote.payload.initiator,
-    ].some((value) => value.toLowerCase().includes(query)));
+    ].some((value) => String(value ?? "").toLowerCase().includes(query)));
   }, [quoteSearch, session?.quotes]);
   const role = session?.viewer.isLocalDemo ? demoRole : session?.viewer.role ?? "user";
   const isAdmin = role === "admin";
@@ -186,6 +187,7 @@ export function QuoteTool() {
                     <div className="column-label">Customer details</div>
                     <Field label="Date"><input type="date" value={inputs.date} onChange={(e) => setField("date", e.target.value)} /></Field>
                     <Field label="Customer name"><input value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
+                    <Field label="Phone"><input type="tel" value={inputs.phone ?? ""} placeholder="Enter phone number" onChange={(e) => setField("phone", e.target.value)} /></Field>
                     <Field label="Project address"><input value={inputs.address} placeholder="Enter installation address" onChange={(e) => setField("address", e.target.value)} /></Field>
                     <Field label="E³ Energy Initiator"><input value={inputs.initiator} placeholder="Enter owner name" onChange={(e) => setField("initiator", e.target.value)} /></Field>
                   </div>
@@ -275,7 +277,7 @@ export function QuoteTool() {
               <>
                 <label className="history-search">
                   <span aria-hidden="true">⌕</span>
-                  <input type="search" value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} placeholder="Search by customer name or address" aria-label="Search saved quotes" />
+                  <input type="search" value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} placeholder="Search by name, address or phone" aria-label="Search saved quotes" />
                   {quoteSearch && <button type="button" onClick={() => setQuoteSearch("")}>Clear</button>}
                 </label>
                 {filteredQuotes.length === 0 ? (
@@ -284,8 +286,9 @@ export function QuoteTool() {
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
                     return <button key={quote.id} onClick={() => { setQuoteId(quote.id); setInputs(quote.payload); setTab("quote"); }}>
-                      <span><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small></span>
-                      <span><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
+                      <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"}</small></span>
+                      <span className="history-config"><b>{quote.payload.pvSize || "-"} kW Solar · {quote.payload.batteryKwh || "-"} kWh Battery</b><small>{quote.payload.inverter || "No inverter selected"}</small></span>
+                      <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
                       <span className="chevron">›</span>
                     </button>;
                   })}</div>

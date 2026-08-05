@@ -32,6 +32,7 @@ export type AppSettings = {
 export type QuoteInputs = {
   date: string;
   customerName: string;
+  phone: string;
   address: string;
   pvSize: number;
   batteryKwh: number;

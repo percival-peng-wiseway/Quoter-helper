@@ -63,6 +63,7 @@ export const defaultSettings: AppSettings = {
 export const defaultQuote: QuoteInputs = {
   date: "2026-05-25",
   customerName: "",
+  phone: "",
   address: "",
   pvSize: 0,
   batteryKwh: 20.88,
