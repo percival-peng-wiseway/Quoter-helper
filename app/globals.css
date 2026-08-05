@@ -84,6 +84,14 @@ input, select { width: 100%; height: 46px; border: 1px solid #ccd6cf; border-rad
 input::placeholder { color: #98a39c; }
 input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(242,138,58,.13); }
 .project-panel input, .project-panel select, .funding-grid .field input { border-color: #e8c3a5; background: #fffdfa; }
+.address-autocomplete { position: relative; min-width: 0; }
+.address-autocomplete > input { padding-right: 92px; }
+.address-search-state { position: absolute; top: 50%; right: 13px; color: #7b887f; font-size: 11px; transform: translateY(-50%); }
+.address-suggestions { position: absolute; top: calc(100% + 6px); right: 0; left: 0; z-index: 40; max-height: 300px; overflow-y: auto; border: 1px solid #d7e0d9; border-radius: 10px; background: white; box-shadow: 0 14px 36px rgba(20,35,28,.16); }
+.address-option { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 11px 13px; border-bottom: 1px solid #edf1ee; color: #35453b; font-size: 13px; line-height: 1.4; cursor: pointer; }
+.address-option > span { color: var(--orange-dark); font-size: 16px; }
+.address-option:hover, .address-option:focus { outline: none; background: #fff7f0; }
+.address-source { display: block; padding: 8px 13px; color: #7b887f; font-size: 10px; font-weight: 600; }
 .number-input { display: flex; align-items: center; min-width: 0; height: 46px; border: 1px solid #ccd6cf; border-radius: 9px; background: white; overflow: hidden; }
 .number-input:focus-within { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(242,140,56,.12); }
 .number-input span { padding: 0 9px; color: #7f8782; font-size: 13px; }
