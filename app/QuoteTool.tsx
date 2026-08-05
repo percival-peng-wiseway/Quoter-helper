@@ -308,7 +308,11 @@ export function QuoteTool() {
                     const calculated = calculateQuote(quote.payload, settings);
                     return <button key={quote.id} onClick={() => { setQuoteId(quote.id); setInputs(quote.payload); setTab("quote"); }}>
                       <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"}</small></span>
-                      <span className="history-config"><b>{quote.payload.pvSize || "-"} kW Solar · {quote.payload.batteryKwh || "-"} kWh Battery</b><small>{quote.payload.inverter || "No inverter selected"}</small></span>
+                      <span className="history-config">
+                        <span><em>Solar</em><b>{quote.payload.pvSize || "-"} kW</b></span>
+                        <span><em>Battery</em><b>{quote.payload.batteryKwh || "-"} kWh</b></span>
+                        <span><em>Inverter</em><b>{quote.payload.inverter || "No inverter selected"}</b></span>
+                      </span>
                       <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
                       <span className="chevron">›</span>
                     </button>;

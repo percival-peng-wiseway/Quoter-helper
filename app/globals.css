@@ -164,8 +164,10 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .history-list button:hover { background: #f7faf8; }
 .history-list b { display: block; color: #27372e; font-size: 15px; }
 .history-list small { display: block; margin-top: 5px; color: #6f7d74; font-size: 12px; }
-.history-config { min-width: 0; }
-.history-config b, .history-config small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-config { display: grid; min-width: 0; gap: 5px; }
+.history-config > span { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; gap: 10px; min-width: 0; }
+.history-config em { color: #75837a; font-size: 11px; font-style: normal; font-weight: 750; letter-spacing: .035em; text-transform: uppercase; }
+.history-config b { overflow: hidden; color: #34443a; font-size: 13px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
 .history-margin { text-align: right; }
 .mini-status { display: inline-block !important; width: max-content; margin-left: auto; padding: 4px 7px; border-radius: 5px; font-weight: 750; }
 .mini-status.healthy { color: var(--green); background: var(--green-soft); }
