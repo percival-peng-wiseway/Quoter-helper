@@ -1,4 +1,5 @@
 export type Role = "admin" | "user";
+export type QuoteStatus = "drafting" | "done";
 
 export type CatalogItem = {
   name: string;
@@ -60,6 +61,7 @@ export type QuoteInputs = {
 export type QuoteRecord = {
   id: string;
   projectName: string;
+  status: QuoteStatus;
   payload: QuoteInputs;
   createdAt: string;
   updatedAt: string;

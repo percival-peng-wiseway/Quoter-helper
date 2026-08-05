@@ -1,7 +1,7 @@
 import { getChatGPTUser } from "../../app/chatgpt-auth";
 import { getRawDb } from "../../db";
 import { defaultSettings } from "../defaults";
-import type { AppSettings, QuoteInputs, QuoteRecord, Role, SystemNotification, Viewer } from "../model";
+import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../model";
 
 let schemaReady = false;
 
@@ -26,6 +26,7 @@ async function ensureSchema() {
       id TEXT PRIMARY KEY,
       owner_id TEXT NOT NULL,
       project_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'drafting' CHECK (status IN ('drafting', 'done')),
       payload TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -153,13 +154,14 @@ export async function listNotifications(): Promise<SystemNotification[]> {
 }
 
 export async function listQuotes(viewer: Viewer): Promise<QuoteRecord[]> {
-  const result = await getRawDb().prepare(`SELECT id, project_name, payload, created_at, updated_at
+  const result = await getRawDb().prepare(`SELECT id, project_name, status, payload, created_at, updated_at
     FROM quotes WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 20`)
     .bind(viewer.userId)
-    .all<{ id: string; project_name: string; payload: string; created_at: string; updated_at: string }>();
+    .all<{ id: string; project_name: string; status: QuoteStatus; payload: string; created_at: string; updated_at: string }>();
   return result.results.map((row) => ({
     id: row.id,
     projectName: row.project_name,
+    status: row.status,
     payload: JSON.parse(row.payload) as QuoteInputs,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -181,6 +183,17 @@ export async function saveQuote(viewer: Viewer, id: string | null, payload: Quot
     .bind(quoteId, viewer.userId, projectName, JSON.stringify(payload))
     .run();
   return quoteId;
+}
+
+export async function updateQuoteStatus(viewer: Viewer, id: string, status: QuoteStatus) {
+  const existing = await getRawDb().prepare("SELECT owner_id FROM quotes WHERE id = ?")
+    .bind(id)
+    .first<{ owner_id: string }>();
+  if (!existing) throw new Response("Quote not found", { status: 404 });
+  if (existing.owner_id !== viewer.userId) throw new Response("Forbidden", { status: 403 });
+  await getRawDb().prepare("UPDATE quotes SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(status, id)
+    .run();
 }
 
 export async function listUsers(viewer: Viewer) {

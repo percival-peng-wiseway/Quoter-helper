@@ -1,5 +1,5 @@
-import type { QuoteInputs } from "../../../lib/model";
-import { requireViewer, saveQuote } from "../../../lib/server/store";
+import type { QuoteInputs, QuoteStatus } from "../../../lib/model";
+import { requireViewer, saveQuote, updateQuoteStatus } from "../../../lib/server/store";
 
 export async function POST(request: Request) {
   try {
@@ -11,5 +11,20 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Response) return error;
     return Response.json({ error: error instanceof Error ? error.message : "Unable to save quote" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const viewer = await requireViewer();
+    const body = await request.json() as { id?: string; status?: QuoteStatus };
+    if (!body.id || !body.status || !["drafting", "done"].includes(body.status)) {
+      return Response.json({ error: "A valid quote and status are required" }, { status: 400 });
+    }
+    await updateQuoteStatus(viewer, body.id, body.status);
+    return Response.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to update quote status" }, { status: 500 });
   }
 }

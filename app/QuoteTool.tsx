@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
-import type { AppSettings, QuoteInputs, QuoteRecord, Role, SystemNotification, Viewer } from "../lib/model";
+import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
 
 type UserRow = { userId: string; email: string; displayName: string; role: Role; createdAt: string };
 type SessionData = { viewer: Viewer; settings: AppSettings; quotes: QuoteRecord[]; users: UserRow[]; notifications: SystemNotification[] };
@@ -36,6 +36,7 @@ export function QuoteTool() {
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("quote");
   const [quoteSearch, setQuoteSearch] = useState("");
+  const [statusBusyId, setStatusBusyId] = useState("");
   const [demoRole, setDemoRole] = useState<Role>("admin");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -109,6 +110,28 @@ export function QuoteTool() {
       flash(error instanceof Error ? error.message : "Unable to save quote");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const changeQuoteStatus = async (id: string, status: QuoteStatus) => {
+    setStatusBusyId(id);
+    try {
+      const response = await fetch("/api/quotes", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Unable to update status");
+      setSession((current) => current ? {
+        ...current,
+        quotes: current.quotes.map((quote) => quote.id === id ? { ...quote, status } : quote),
+      } : current);
+      flash(status === "done" ? "Quote marked as done" : "Quote moved to drafting");
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Unable to update status");
+    } finally {
+      setStatusBusyId("");
     }
   };
 
@@ -306,16 +329,26 @@ export function QuoteTool() {
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
-                    return <button key={quote.id} onClick={() => { setQuoteId(quote.id); setInputs(quote.payload); setTab("quote"); }}>
-                      <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"}</small></span>
-                      <span className="history-config">
-                        <span><em>Solar</em><b>{quote.payload.pvSize || "-"} kW</b></span>
-                        <span><em>Battery</em><b>{quote.payload.batteryKwh || "-"} kWh</b></span>
-                        <span><em>Inverter</em><b>{quote.payload.inverter || "No inverter selected"}</b></span>
-                      </span>
-                      <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
-                      <span className="chevron">›</span>
-                    </button>;
+                    const openQuote = () => { setQuoteId(quote.id); setInputs(quote.payload); setTab("quote"); };
+                    return <div className="history-row" key={quote.id}>
+                      <button className="history-main" onClick={openQuote}>
+                        <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"}</small></span>
+                        <span className="history-config">
+                          <span><em>Solar</em><b>{quote.payload.pvSize || "-"} kW</b></span>
+                          <span><em>Battery</em><b>{quote.payload.batteryKwh || "-"} kWh</b></span>
+                          <span><em>Inverter</em><b>{quote.payload.inverter || "No inverter selected"}</b></span>
+                        </span>
+                        <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
+                        <span className="chevron">›</span>
+                      </button>
+                      <label className="history-status">
+                        <span className="sr-only">Quote status</span>
+                        <select className={quote.status} value={quote.status} disabled={statusBusyId === quote.id} onChange={(event) => void changeQuoteStatus(quote.id, event.target.value as QuoteStatus)}>
+                          <option value="drafting">Drafting</option>
+                          <option value="done">Done</option>
+                        </select>
+                      </label>
+                    </div>;
                   })}</div>
                 )}
               </>

@@ -22,6 +22,7 @@ export const quotes = sqliteTable(
     id: text("id").primaryKey(),
     ownerId: text("owner_id").notNull(),
     projectName: text("project_name").notNull(),
+    status: text("status", { enum: ["drafting", "done"] }).notNull().default("drafting"),
     payload: text("payload").notNull(),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
