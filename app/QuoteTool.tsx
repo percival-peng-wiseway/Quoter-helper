@@ -190,35 +190,39 @@ export function QuoteTool() {
 
               <section className="panel">
                 <div className="section-heading"><div><span>02</span><h2>Quote breakdown</h2></div><small>Sales price = cost × (1 + margin)</small></div>
-                <div className="table-wrap">
-                  <table className="quote-table">
-                    <thead><tr><th>Item</th><th>Cost (excl. GST)</th><th>Margin</th><th>Sales price (excl. GST)</th></tr></thead>
-                    <tbody>
-                      {result.lineItems.map((item) => {
-                        const manualKey = item.key as keyof QuoteInputs["manualCosts"];
-                        return (
-                          <tr key={item.key}>
-                            <td><b>{item.label}</b>{item.note && <small>{item.note}</small>}</td>
-                            <td>{item.editableByUser ? <NumberInput compact value={inputs.manualCosts[manualKey]} prefix="$" onChange={(v) => setManualCost(manualKey, v)} /> : <span className="locked-value">{money.format(item.cost)}</span>}</td>
-                            <td><span className="margin-chip">{pct(item.margin)}</span></td>
-                            <td><b>{money.format(item.salesPrice)}</b></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-              <section className="panel">
-                <div className="section-heading"><div><span>03</span><h2>Rebates & customer balance</h2></div><small>Discounts must be entered as negative values</small></div>
-                <div className="funding-grid">
-                  <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />
-                  <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />
-                  <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
-                  <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
-                  <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
-                  <Field label="Customer balance (incl. GST)"><NumberInput prefix="$" value={inputs.customerBalance} onChange={(v) => setField("customerBalance", v)} /></Field>
+                <div className="quote-funding-layout">
+                  <div className="quote-lines">
+                    <div className="embedded-heading"><b>Quote items</b><small>Cost, margin and sales price</small></div>
+                    <div className="table-wrap">
+                      <table className="quote-table">
+                        <thead><tr><th>Item</th><th>Cost (excl. GST)</th><th>Margin</th><th>Sales price (excl. GST)</th></tr></thead>
+                        <tbody>
+                          {result.lineItems.map((item) => {
+                            const manualKey = item.key as keyof QuoteInputs["manualCosts"];
+                            return (
+                              <tr key={item.key}>
+                                <td><b>{item.label}</b>{item.note && <small>{item.note}</small>}</td>
+                                <td>{item.editableByUser ? <NumberInput compact value={inputs.manualCosts[manualKey]} prefix="$" onChange={(v) => setManualCost(manualKey, v)} /> : <span className="locked-value">{money.format(item.cost)}</span>}</td>
+                                <td><span className="margin-chip">{pct(item.margin)}</span></td>
+                                <td><b>{money.format(item.salesPrice)}</b></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div className="funding-panel">
+                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>Discounts must be negative</small></div>
+                    <div className="funding-grid">
+                      <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />
+                      <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />
+                      <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
+                      <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
+                      <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
+                      <Field label="Customer balance (incl. GST)"><NumberInput prefix="$" value={inputs.customerBalance} onChange={(v) => setField("customerBalance", v)} /></Field>
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
