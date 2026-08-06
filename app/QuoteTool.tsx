@@ -95,6 +95,7 @@ export function QuoteTool() {
       quote.payload.address,
       quote.payload.phone,
       quote.payload.initiator,
+      quote.ownerName,
     ].some((value) => String(value ?? "").toLowerCase().includes(query)));
   }, [quoteSearch, session?.quotes]);
   const role = session?.viewer.role ?? "user";
@@ -205,6 +206,33 @@ export function QuoteTool() {
     }
   };
 
+  const removeQuote = async (id: string, projectName: string) => {
+    if (!isAdmin || !window.confirm(`Delete “${projectName}”? This cannot be undone.`)) return;
+    setStatusBusyId(id);
+    try {
+      const response = await fetch("/api/quotes", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Unable to delete quote");
+      setSession((current) => current ? {
+        ...current,
+        quotes: current.quotes.filter((quote) => quote.id !== id),
+      } : current);
+      if (quoteId === id) {
+        setQuoteId(null);
+        setInputs(freshQuote());
+      }
+      flash("Quote deleted");
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Unable to delete quote");
+    } finally {
+      setStatusBusyId("");
+    }
+  };
+
   const saveSettings = async () => {
     if (!settingsDraft || !isAdmin) return;
     setBusy(true);
@@ -256,7 +284,7 @@ export function QuoteTool() {
 
   const navItems: Array<{ id: Tab; label: string; glyph: string; admin?: boolean }> = [
     { id: "quote", label: "Quote calculator", glyph: "⌁" },
-    { id: "history", label: "My quotes", glyph: "◷" },
+    { id: "history", label: "Team quotes", glyph: "◷" },
     { id: "settings", label: "Base data", glyph: "◇", admin: true },
     { id: "users", label: "User access", glyph: "◎", admin: true },
   ];
@@ -298,7 +326,7 @@ export function QuoteTool() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <h1>{tab === "quote" ? "Quote Table" : tab === "history" ? "My quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
+            <h1>{tab === "quote" ? "Quote Table" : tab === "history" ? "Team quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
           </div>
           <div className="top-actions">
             <button className="ghost-btn mobile-hide" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
@@ -416,7 +444,7 @@ export function QuoteTool() {
 
         {tab === "history" && (
           <section className="panel standalone">
-            <div className="section-heading"><div><span>◷</span><h2>Recent quotes</h2></div><small>Only your own records are shown</small></div>
+            <div className="section-heading"><div><span>◷</span><h2>Shared quotes</h2></div><small>Everyone can view and edit · admins can delete</small></div>
             {session.quotes.length === 0 ? <EmptyState /> : (
               <>
                 <label className="history-search">
@@ -432,7 +460,7 @@ export function QuoteTool() {
                     const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, customItems: quote.payload.customItems ?? [] }); setTab("quote"); };
                     return <div className="history-row" key={quote.id}>
                       <button className="history-main" onClick={openQuote}>
-                        <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"}</small></span>
+                        <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Created by {quote.ownerName}</small></span>
                         <span className="history-config">
                           <span><em>Solar</em><b>{quote.payload.pvSize || "-"} kW</b></span>
                           <span><em>Battery</em><b>{quote.payload.batteryKwh || "-"} kWh</b></span>
@@ -441,13 +469,16 @@ export function QuoteTool() {
                         <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
                         <span className="chevron">›</span>
                       </button>
-                      <label className="history-status">
-                        <span className="sr-only">Quote status</span>
-                        <select className={quote.status} value={quote.status} disabled={statusBusyId === quote.id} onChange={(event) => void changeQuoteStatus(quote.id, event.target.value as QuoteStatus)}>
-                          <option value="drafting">Drafting</option>
-                          <option value="done">Done</option>
-                        </select>
-                      </label>
+                      <div className="history-actions">
+                        <label className="history-status">
+                          <span className="sr-only">Quote status</span>
+                          <select className={quote.status} value={quote.status} disabled={statusBusyId === quote.id} onChange={(event) => void changeQuoteStatus(quote.id, event.target.value as QuoteStatus)}>
+                            <option value="drafting">Drafting</option>
+                            <option value="done">Done</option>
+                          </select>
+                        </label>
+                        {isAdmin && <button type="button" className="delete-quote-btn" disabled={statusBusyId === quote.id} onClick={() => void removeQuote(quote.id, quote.projectName)}>Delete</button>}
+                      </div>
                     </div>;
                   })}</div>
                 )}

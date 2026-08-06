@@ -175,14 +175,17 @@ export async function listNotifications(): Promise<SystemNotification[]> {
   }));
 }
 
-export async function listQuotes(viewer: Viewer): Promise<QuoteRecord[]> {
-  const result = await getRawDb().prepare(`SELECT id, project_name, status, payload, created_at, updated_at
-    FROM quotes WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 20`)
-    .bind(viewer.userId)
-    .all<{ id: string; project_name: string; status: QuoteStatus; payload: string; created_at: string; updated_at: string }>();
+export async function listQuotes(): Promise<QuoteRecord[]> {
+  const result = await getRawDb().prepare(`SELECT q.id, q.project_name, q.status, q.payload,
+      q.created_at, q.updated_at, COALESCE(u.display_name, 'Former user') AS owner_name
+    FROM quotes q
+    LEFT JOIN users u ON u.user_id = q.owner_id
+    ORDER BY q.updated_at DESC`)
+    .all<{ id: string; project_name: string; owner_name: string; status: QuoteStatus; payload: string; created_at: string; updated_at: string }>();
   return result.results.map((row) => ({
     id: row.id,
     projectName: row.project_name,
+    ownerName: row.owner_name,
     status: row.status,
     payload: JSON.parse(row.payload) as QuoteInputs,
     createdAt: row.created_at,
@@ -192,11 +195,6 @@ export async function listQuotes(viewer: Viewer): Promise<QuoteRecord[]> {
 
 export async function saveQuote(viewer: Viewer, id: string | null, payload: QuoteInputs): Promise<string> {
   const quoteId = id ?? crypto.randomUUID();
-  const existing = await getRawDb().prepare("SELECT owner_id FROM quotes WHERE id = ?")
-    .bind(quoteId)
-    .first<{ owner_id: string }>();
-  if (existing && existing.owner_id !== viewer.userId) throw new Response("Forbidden", { status: 403 });
-
   const projectName = payload.customerName.trim() || payload.address.trim() || "Untitled quote";
   await getRawDb().prepare(`INSERT INTO quotes (id, owner_id, project_name, payload)
     VALUES (?, ?, ?, ?)
@@ -207,15 +205,23 @@ export async function saveQuote(viewer: Viewer, id: string | null, payload: Quot
   return quoteId;
 }
 
-export async function updateQuoteStatus(viewer: Viewer, id: string, status: QuoteStatus) {
-  const existing = await getRawDb().prepare("SELECT owner_id FROM quotes WHERE id = ?")
+export async function updateQuoteStatus(_viewer: Viewer, id: string, status: QuoteStatus) {
+  const existing = await getRawDb().prepare("SELECT id FROM quotes WHERE id = ?")
     .bind(id)
-    .first<{ owner_id: string }>();
+    .first<{ id: string }>();
   if (!existing) throw new Response("Quote not found", { status: 404 });
-  if (existing.owner_id !== viewer.userId) throw new Response("Forbidden", { status: 403 });
   await getRawDb().prepare("UPDATE quotes SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .bind(status, id)
     .run();
+}
+
+export async function deleteQuote(viewer: Viewer, id: string) {
+  if (viewer.role !== "admin") throw new Response("Forbidden", { status: 403 });
+  const existing = await getRawDb().prepare("SELECT id FROM quotes WHERE id = ?")
+    .bind(id)
+    .first<{ id: string }>();
+  if (!existing) throw new Response("Quote not found", { status: 404 });
+  await getRawDb().prepare("DELETE FROM quotes WHERE id = ?").bind(id).run();
 }
 
 export async function listUsers(viewer: Viewer) {

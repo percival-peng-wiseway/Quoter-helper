@@ -7,7 +7,7 @@ export async function GET() {
     const viewer = await requireViewer();
     const [settings, quotes, users, notifications] = await Promise.all([
       getSettings(),
-      listQuotes(viewer),
+      listQuotes(),
       listUsers(viewer),
       listNotifications(),
     ]);

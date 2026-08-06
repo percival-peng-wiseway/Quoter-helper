@@ -67,6 +67,7 @@ export type QuoteInputs = {
 export type QuoteRecord = {
   id: string;
   projectName: string;
+  ownerName: string;
   status: QuoteStatus;
   payload: QuoteInputs;
   createdAt: string;
