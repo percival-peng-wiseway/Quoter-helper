@@ -1,5 +1,5 @@
-import { getChatGPTUser, getPublicVisitor } from "../../app/chatgpt-auth";
 import { getRawDb } from "../../db";
+import { getAuthenticatedAccount } from "./auth";
 import { defaultSettings } from "../defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../model";
 
@@ -43,68 +43,21 @@ async function ensureSchema() {
   schemaReady = true;
 }
 
-async function requestIdentity() {
-  const authenticated = await getChatGPTUser();
-  if (authenticated) {
-    return { ...authenticated, isLocalDemo: false, canBootstrapAdmin: true };
-  }
-  if (process.env.NODE_ENV !== "production") {
-    return {
-      userId: "local-demo-admin",
-      email: "admin@local.preview",
-      displayName: "Local Admin",
-      fullName: "Local Admin",
-      isLocalDemo: true,
-      canBootstrapAdmin: true,
-    };
-  }
-  const publicVisitor = await getPublicVisitor();
-  return { ...publicVisitor, isLocalDemo: false, canBootstrapAdmin: false };
-}
-
 export async function requireViewer(): Promise<Viewer> {
   await ensureSchema();
-  const identity = await requestIdentity();
-  const db = getRawDb();
+  const identity = await getAuthenticatedAccount();
+  if (!identity) throw new Response("Authentication required", { status: 401 });
 
-  const existing = await db.prepare("SELECT user_id, email, display_name, role FROM users WHERE user_id = ?")
-    .bind(identity.userId)
-    .first<{ user_id: string; email: string; display_name: string; role: Role }>();
-
-  if (!existing) {
-    await db.prepare(`INSERT INTO users (user_id, email, display_name, role)
-      SELECT ?, ?, ?, CASE
-        WHEN ? = 1 AND NOT EXISTS (SELECT 1 FROM users) THEN 'admin'
-        ELSE 'user'
-      END`)
-      .bind(
-        identity.userId,
-        identity.email,
-        identity.displayName,
-        identity.canBootstrapAdmin ? 1 : 0,
-      )
-      .run();
-  } else if (existing.email !== identity.email || existing.display_name !== identity.displayName) {
-    await db.prepare("UPDATE users SET email = ?, display_name = ? WHERE user_id = ?")
-      .bind(identity.email, identity.displayName, identity.userId)
-      .run();
-  }
-
-  const row = await db.prepare("SELECT user_id, email, display_name, role FROM users WHERE user_id = ?")
-    .bind(identity.userId)
-    .first<{ user_id: string; email: string; display_name: string; role: Role }>();
-  if (!row) throw new Error("Unable to initialize user account");
-
-  await db.prepare("INSERT OR IGNORE INTO app_settings (id, payload, updated_by) VALUES (1, ?, ?)")
+  await getRawDb().prepare("INSERT OR IGNORE INTO app_settings (id, payload, updated_by) VALUES (1, ?, ?)")
     .bind(JSON.stringify(defaultSettings), identity.userId)
     .run();
 
   return {
-    userId: row.user_id,
-    email: row.email,
-    displayName: row.display_name,
-    role: row.role,
-    isLocalDemo: identity.isLocalDemo,
+    userId: identity.userId,
+    email: identity.email,
+    displayName: identity.displayName,
+    role: identity.role,
+    isLocalDemo: false,
   };
 }
 
@@ -268,7 +221,7 @@ export async function updateQuoteStatus(viewer: Viewer, id: string, status: Quot
 export async function listUsers(viewer: Viewer) {
   if (viewer.role !== "admin") return [];
   const result = await getRawDb().prepare(`SELECT user_id, email, display_name, role, created_at
-    FROM users ORDER BY created_at ASC`).all<{
+    FROM users WHERE user_id LIKE 'password-account:%' ORDER BY created_at ASC`).all<{
       user_id: string; email: string; display_name: string; role: Role; created_at: string;
     }>();
   return result.results.map((row) => ({
@@ -278,18 +231,4 @@ export async function listUsers(viewer: Viewer) {
     role: row.role,
     createdAt: row.created_at,
   }));
-}
-
-export async function updateUserRole(viewer: Viewer, userId: string, role: Role) {
-  if (viewer.role !== "admin") throw new Response("Forbidden", { status: 403 });
-  if (viewer.userId === userId && role !== "admin") {
-    throw new Response("You cannot remove your own administrator access", { status: 400 });
-  }
-  await getRawDb().prepare("UPDATE users SET role = ? WHERE user_id = ?").bind(role, userId).run();
-}
-
-export async function grantViewerAdminAccess(viewer: Viewer) {
-  await getRawDb().prepare("UPDATE users SET role = 'admin' WHERE user_id = ?")
-    .bind(viewer.userId)
-    .run();
 }

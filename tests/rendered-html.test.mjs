@@ -25,21 +25,29 @@ test("builds the production Cloudflare bindings", async () => {
   ]);
 });
 
-test("supports public visitor sessions and a runtime-only administrator secret", async () => {
-  const [auth, store, adminRoute, quoteTool, readme] = await Promise.all([
-    readFile(new URL("app/chatgpt-auth.ts", root), "utf8"),
+test("uses fixed password accounts with secure server-side sessions", async () => {
+  const [auth, store, loginRoute, logoutRoute, quoteTool, migration] = await Promise.all([
+    readFile(new URL("lib/server/auth.ts", root), "utf8"),
     readFile(new URL("lib/server/store.ts", root), "utf8"),
-    readFile(new URL("app/api/admin-access/route.ts", root), "utf8"),
+    readFile(new URL("app/api/login/route.ts", root), "utf8"),
+    readFile(new URL("app/api/logout/route.ts", root), "utf8"),
     readFile(new URL("app/QuoteTool.tsx", root), "utf8"),
-    readFile(new URL("README.md", root), "utf8"),
+    readFile(new URL("drizzle/0005_worried_mole_man.sql", root), "utf8"),
   ]);
 
-  assert.match(auth, /cf-access-authenticated-user-email/);
-  assert.match(auth, /e3-quoter-visitor/);
+  assert.match(auth, /username: "sam"[\s\S]*role: "user"/);
+  assert.match(auth, /username: "ruihan"[\s\S]*role: "user"/);
+  assert.match(auth, /username: "hogan"[\s\S]*role: "admin"/);
+  assert.match(auth, /username: "admin"[\s\S]*role: "admin"/);
+  assert.match(auth, /PBKDF2_ITERATIONS = 210_000/);
+  assert.match(auth, /e3-quoter-session/);
   assert.match(auth, /httpOnly:\s*true/);
-  assert.match(store, /canBootstrapAdmin:\s*false/);
-  assert.match(adminRoute, /env[\s\S]*ADMIN_PASSWORD/);
-  assert.match(adminRoute, /crypto\.subtle\.digest/);
-  assert.match(quoteTool, /Administrator access/);
-  assert.doesNotMatch(`${auth}\n${store}\n${adminRoute}\n${quoteTool}\n${readme}`, /e3123/i);
+  assert.match(auth, /MAX_LOGIN_FAILURES = 5/);
+  assert.match(store, /Authentication required/);
+  assert.match(loginRoute, /loginWithPassword/);
+  assert.match(logoutRoute, /logoutCurrentSession/);
+  assert.match(quoteTool, /Sign in to continue/);
+  assert.match(migration, /CREATE TABLE `auth_sessions`/);
+  assert.match(migration, /CREATE TABLE `login_attempts`/);
+  assert.doesNotMatch(auth, /password:\s*["']/i);
 });

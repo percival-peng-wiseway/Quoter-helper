@@ -9,6 +9,27 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const authSessions = sqliteTable(
+  "auth_sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("idx_auth_sessions_user").on(table.userId),
+    index("idx_auth_sessions_expiry").on(table.expiresAt),
+  ],
+);
+
+export const loginAttempts = sqliteTable("login_attempts", {
+  attemptKey: text("attempt_key").primaryKey(),
+  failureCount: integer("failure_count").notNull(),
+  firstFailedAt: integer("first_failed_at").notNull(),
+  blockedUntil: integer("blocked_until"),
+});
+
 export const appSettings = sqliteTable("app_settings", {
   id: integer("id").primaryKey(),
   payload: text("payload").notNull(),

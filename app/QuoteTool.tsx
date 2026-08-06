@@ -39,40 +39,47 @@ export function QuoteTool() {
   const [tab, setTab] = useState<Tab>("quote");
   const [quoteSearch, setQuoteSearch] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
-  const [demoRole, setDemoRole] = useState<Role>("admin");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminBusy, setAdminBusy] = useState(false);
-  const [adminError, setAdminError] = useState("");
+  const [loginRequired, setLoginRequired] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   const fetchSession = async () => {
     const response = await fetch("/api/session", { cache: "no-store" });
-    if (response.status === 401) {
-      throw new Error("Unable to start your visitor session. Please refresh and try again.");
-    }
+    if (response.status === 401) return null;
     if (!response.headers.get("content-type")?.includes("application/json")) {
       throw new Error("Unable to load the quote tool. Please refresh and sign in again.");
     }
     const data = await response.json() as SessionData & { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Unable to load data");
-    return data;
+    return data as SessionData;
   };
 
   const loadSession = async () => {
     const data = await fetchSession();
+    if (!data) {
+      setSession(null);
+      setLoginRequired(true);
+      return;
+    }
     setSession(data);
     setSettingsDraft(structuredClone(data.settings));
-    setDemoRole(data.viewer.role);
+    setLoginRequired(false);
   };
 
   useEffect(() => {
     void fetchSession()
       .then((data) => {
+        if (!data) {
+          setLoginRequired(true);
+          return;
+        }
         setSession(data);
         setSettingsDraft(structuredClone(data.settings));
-        setDemoRole(data.viewer.role);
+        setLoginRequired(false);
       })
       .catch((error) => setMessage(error instanceof Error ? error.message : "Unable to load data"));
   }, []);
@@ -90,7 +97,7 @@ export function QuoteTool() {
       quote.payload.initiator,
     ].some((value) => String(value ?? "").toLowerCase().includes(query)));
   }, [quoteSearch, session?.quotes]);
-  const role = session?.viewer.isLocalDemo ? demoRole : session?.viewer.role ?? "user";
+  const role = session?.viewer.role ?? "user";
   const isAdmin = role === "admin";
 
   const setField = <K extends keyof QuoteInputs>(key: K, value: QuoteInputs[K]) => {
@@ -121,27 +128,38 @@ export function QuoteTool() {
     window.setTimeout(() => setMessage(""), 2800);
   };
 
-  const requestAdminAccess = async (event: FormEvent<HTMLFormElement>) => {
+  const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAdminBusy(true);
-    setAdminError("");
+    setLoginBusy(true);
+    setLoginError("");
     try {
-      const response = await fetch("/api/admin-access", {
+      const response = await fetch("/api/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
       });
       const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Unable to enable administrator access");
+      if (!response.ok) throw new Error(data.error ?? "Unable to sign in");
       await loadSession();
-      setAdminPassword("");
-      setAdminDialogOpen(false);
-      setTab("settings");
-      flash("Administrator access enabled");
+      setLoginPassword("");
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : "Unable to enable administrator access");
+      setLoginError(error instanceof Error ? error.message : "Unable to sign in");
     } finally {
-      setAdminBusy(false);
+      setLoginBusy(false);
+    }
+  };
+
+  const signOut = async () => {
+    setBusy(true);
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } finally {
+      setSession(null);
+      setSettingsDraft(null);
+      setLoginPassword("");
+      setLoginRequired(true);
+      setTab("quote");
+      setBusy(false);
     }
   };
 
@@ -207,10 +225,24 @@ export function QuoteTool() {
     }
   };
 
+  if (loginRequired) {
+    return (
+      <LoginScreen
+        username={loginUsername}
+        password={loginPassword}
+        busy={loginBusy}
+        error={loginError}
+        onUsernameChange={setLoginUsername}
+        onPasswordChange={setLoginPassword}
+        onSubmit={signIn}
+      />
+    );
+  }
+
   if (!session || !settings || !result || !settingsDraft) {
     return (
       <main className="loading-screen">
-        <div className="brand-mark large">E3</div>
+        <span className="brand-logo-badge large" role="img" aria-label="E3 Energy" />
         <div><strong>E3 Quoter</strong><p>{message || "Syncing the quote model…"}</p></div>
       </main>
     );
@@ -233,7 +265,7 @@ export function QuoteTool() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">E3</span><span><b>E3 Quoter</b></span></div>
+        <div className="brand"><span className="brand-logo-badge" role="img" aria-label="E3 Energy" /><span><b>E3 Quoter</b></span></div>
         <nav>
           {navItems.filter((item) => !item.admin || isAdmin).map((item) => (
             <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>
@@ -269,19 +301,8 @@ export function QuoteTool() {
             <h1>{tab === "quote" ? "Quote Table" : tab === "history" ? "My quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
           </div>
           <div className="top-actions">
-            {session.viewer.isLocalDemo && (
-              <label className="demo-switch">Local demo
-                <select value={demoRole} onChange={(event) => { setDemoRole(event.target.value as Role); setTab("quote"); }}>
-                  <option value="admin">Administrator view</option><option value="user">Standard user view</option>
-                </select>
-              </label>
-            )}
-            {session.viewer.role !== "admin" && !session.viewer.isLocalDemo && (
-              <button className="ghost-btn admin-access-trigger" onClick={() => { setAdminError(""); setAdminDialogOpen(true); }}>
-                Administrator access
-              </button>
-            )}
-            <button className="ghost-btn" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
+            <button className="ghost-btn mobile-hide" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
+            <button className="ghost-btn" disabled={busy} onClick={() => void signOut()}>Sign out</button>
             {tab === "quote" && <button className="primary-btn" disabled={busy} onClick={saveQuote}>{busy ? "Saving…" : "Save quote"}</button>}
             {tab === "settings" && isAdmin && <button className="primary-btn" disabled={busy} onClick={saveSettings}>{busy ? "Publishing…" : "Publish changes"}</button>}
           </div>
@@ -440,35 +461,58 @@ export function QuoteTool() {
         )}
 
         {tab === "users" && isAdmin && (
-          <UsersPanel viewer={session.viewer} users={session.users} onChanged={async () => { await loadSession(); flash("Access updated"); }} />
+          <UsersPanel viewer={session.viewer} users={session.users} />
         )}
       </main>
 
-      {adminDialogOpen && (
-        <div className="dialog-backdrop" role="presentation" onMouseDown={() => !adminBusy && setAdminDialogOpen(false)}>
-          <section className="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="admin-dialog-icon">E3</div>
-            <div>
-              <h2 id="admin-dialog-title">Administrator access</h2>
-              <p>Enter the administrator password to manage base data and user access.</p>
-            </div>
-            <form onSubmit={requestAdminAccess}>
-              <label className="field">
-                <span>Administrator password</span>
-                <input autoFocus type="password" autoComplete="current-password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
-              </label>
-              {adminError && <p className="admin-dialog-error" role="alert">{adminError}</p>}
-              <div className="admin-dialog-actions">
-                <button type="button" className="ghost-btn" disabled={adminBusy} onClick={() => { setAdminDialogOpen(false); setAdminPassword(""); }}>Cancel</button>
-                <button type="submit" className="primary-btn" disabled={adminBusy || adminPassword.length === 0}>{adminBusy ? "Checking…" : "Continue as administrator"}</button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
-
       {message && <div className="toast">{message}</div>}
     </div>
+  );
+}
+
+function LoginScreen({
+  username,
+  password,
+  busy,
+  error,
+  onUsernameChange,
+  onPasswordChange,
+  onSubmit,
+}: {
+  username: string;
+  password: string;
+  busy: boolean;
+  error: string;
+  onUsernameChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <main className="login-screen">
+      <section className="login-card" aria-labelledby="login-title">
+        <div className="login-brand"><span className="brand-logo-badge large" role="img" aria-label="E3 Energy" /><div><b>E3 Quoter</b><small>Quote and margin workspace</small></div></div>
+        <div className="login-copy">
+          <span>SECURE ACCESS</span>
+          <h1 id="login-title">Sign in to continue</h1>
+          <p>Use your assigned E3 Quoter account.</p>
+        </div>
+        <form onSubmit={onSubmit}>
+          <label className="field">
+            <span>Username</span>
+            <input autoFocus autoComplete="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input type="password" autoComplete="current-password" value={password} onChange={(event) => onPasswordChange(event.target.value)} />
+          </label>
+          {error && <p className="login-error" role="alert">{error}</p>}
+          <button className="primary-btn login-submit" type="submit" disabled={busy || !username.trim() || !password}>
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+        <small className="login-help">Contact an administrator if you cannot access your account.</small>
+      </section>
+    </main>
   );
 }
 
@@ -556,19 +600,10 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
   </div>;
 }
 
-function UsersPanel({ viewer, users, onChanged }: { viewer: Viewer; users: UserRow[]; onChanged: () => Promise<void> }) {
-  const [busyId, setBusyId] = useState("");
-  const changeRole = async (userId: string, role: Role) => {
-    setBusyId(userId);
-    try {
-      const response = await fetch("/api/users", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId, role }) });
-      if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "Unable to update access");
-      await onChanged();
-    } finally { setBusyId(""); }
-  };
+function UsersPanel({ viewer, users }: { viewer: Viewer; users: UserRow[] }) {
   return <section className="panel standalone">
-    <div className="section-heading"><div><span>U</span><h2>User access</h2></div><small>The first signed-in user becomes an administrator</small></div>
-    <div className="user-list">{users.map((user) => <div key={user.userId} className="user-row"><div className="avatar">{user.displayName.slice(0, 1).toUpperCase()}</div><div className="user-info"><b>{user.displayName}{user.userId === viewer.userId && <em>You</em>}</b><small>{user.email}</small></div><select disabled={busyId === user.userId || user.userId === viewer.userId} value={user.role} onChange={(e) => changeRole(user.userId, e.target.value as Role)}><option value="user">Standard user</option><option value="admin">Administrator</option></select></div>)}</div>
+    <div className="section-heading"><div><span>U</span><h2>User access</h2></div><small>Account roles are fixed</small></div>
+    <div className="user-list">{users.map((user) => <div key={user.userId} className="user-row"><div className="avatar">{user.displayName.slice(0, 1).toUpperCase()}</div><div className="user-info"><b>{user.displayName}{user.userId === viewer.userId && <em>You</em>}</b><small>{user.email}</small></div><span className={`role-badge ${user.role}`}>{user.role === "admin" ? "Administrator" : "Standard user"}</span></div>)}</div>
     <div className="permission-note"><b>Access rules</b><p>Standard users can edit customer and project details, rebates, discounts and site-specific costs. Only administrators can change equipment catalogues, base costs, STC prices and margin thresholds.</p></div>
   </section>;
 }

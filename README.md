@@ -25,17 +25,11 @@ Local development uses the built-in local administrator identity. D1 data is sto
 - Assets binding: `ASSETS`
 - Images binding: `IMAGES`
 
-The application is publicly accessible by default. Each browser receives a long-lived, HTTP-only visitor cookie so saved quote history and administrator elevation remain separate between visitors. Public visitors always start as standard users and must enter the configured administrator password to manage base data or users.
+The application has four password accounts with fixed roles. Passwords are stored only as PBKDF2 hashes, successful sign-in creates a seven-day server-side session in D1, and the browser receives an HTTP-only session cookie. Repeated failed sign-in attempts are temporarily blocked.
 
-If Cloudflare Access is enabled later, the application will use `cf-access-authenticated-user-email` as the visitor identity. It also retains the OpenAI Sites identity headers for compatibility with the original hosted version. The first authenticated user becomes an administrator; other users can choose **Administrator access** and enter the configured administrator password.
+Standard users can create and manage their own quotes. Administrators can additionally manage base data and view the fixed account list. Account roles cannot be changed through the application.
 
-Store the administrator password as a runtime secret; never commit it to this repository:
-
-```bash
-npx wrangler secret put ADMIN_PASSWORD
-```
-
-Enter the agreed administrator password only when Wrangler prompts for the secret value. In the Cloudflare dashboard, the equivalent location is **Worker → Settings → Variables & Secrets**, with type **Secret**.
+To change an account password, generate a new unique salt and PBKDF2-SHA256 hash and update the matching account entry in `lib/server/auth.ts`; never store plaintext passwords in the repository.
 
 ## Database and deployment
 
