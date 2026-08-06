@@ -45,6 +45,13 @@ export function QuoteTool() {
 
   const fetchSession = async () => {
     const response = await fetch("/api/session", { cache: "no-store" });
+    if (response.status === 401) {
+      window.location.assign("/signin-with-chatgpt?return_to=%2F");
+      throw new Error("Sign in required");
+    }
+    if (!response.headers.get("content-type")?.includes("application/json")) {
+      throw new Error("Unable to load the quote tool. Please refresh and sign in again.");
+    }
     const data = await response.json() as SessionData & { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Unable to load data");
     return data;

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { QuoteTool } from "./QuoteTool";
+import { requireChatGPTUser } from "./chatgpt-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
   description: "Quote and gross margin approval tool",
 };
 
-export default function Home() {
+export default async function Home() {
+  await requireChatGPTUser("/");
   return <QuoteTool />;
 }
