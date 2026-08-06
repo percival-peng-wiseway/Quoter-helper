@@ -306,8 +306,8 @@ export function QuoteTool() {
                       <div className="funding-final-column totals-control">
                         <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
                         <div className="quote-total-chips">
-                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>Excl. GST</small></div>
-                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>Excl. GST</small></div>
+                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>After both STCs</small></div>
+                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>After both STCs</small></div>
                         </div>
                       </div>
                       <div className="balance-control">
