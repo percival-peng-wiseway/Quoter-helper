@@ -59,6 +59,8 @@ button { cursor: pointer; transition: border-color .16s ease, background .16s ea
 .primary-btn { border: 1px solid var(--orange-dark); background: var(--orange); color: white; box-shadow: 0 4px 12px rgba(216,109,24,.16); }
 .primary-btn:hover { background: #dc7224; box-shadow: 0 6px 16px rgba(200,97,23,.22); transform: translateY(-1px); }
 .primary-btn:disabled { opacity: .6; cursor: wait; }
+.admin-access-trigger { color: var(--orange-dark); border-color: #e7b68e; background: #fff9f4; }
+.admin-access-trigger:hover { border-color: var(--orange); background: #fff1e6; }
 .demo-switch { display: flex; align-items: center; gap: 8px; padding-right: 8px; color: var(--muted); font-size: 13px; }
 .demo-switch select { width: auto; height: 34px; padding: 0 28px 0 10px; }
 
@@ -228,6 +230,15 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .loading-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 14px; background: var(--nav); color: white; }
 .loading-screen strong { font-size: 21px; }.loading-screen p { margin: 4px 0 0; color: #91a098; font-size: 13px; }
 .toast { position: fixed; right: 28px; bottom: 28px; z-index: 20; padding: 13px 17px; border-radius: 8px; background: #222c27; color: white; box-shadow: 0 10px 30px rgba(0,0,0,.18); font-size: 14px; }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px; background: rgba(9,20,14,.56); backdrop-filter: blur(4px); }
+.admin-dialog { width: min(440px, 100%); padding: 28px; border: 1px solid #e4e9e5; border-radius: 16px; background: white; box-shadow: 0 24px 80px rgba(8,24,15,.28); }
+.admin-dialog-icon { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: 18px; border-radius: 12px; background: var(--orange); color: white; font-weight: 900; }
+.admin-dialog h2 { margin: 0; font-size: 23px; letter-spacing: -.025em; }
+.admin-dialog > div > p { margin: 7px 0 20px; color: var(--muted); font-size: 14px; }
+.admin-dialog form { display: grid; gap: 15px; }
+.admin-dialog-error { margin: -3px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--red-soft); color: var(--red); font-size: 13px; }
+.admin-dialog-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 3px; }
+.admin-dialog-actions button { min-height: 43px; }
 
 @media (max-width: 1120px) {
   .app-shell { grid-template-columns: 84px minmax(0, 1fr); }

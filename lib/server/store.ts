@@ -278,3 +278,9 @@ export async function updateUserRole(viewer: Viewer, userId: string, role: Role)
   }
   await getRawDb().prepare("UPDATE users SET role = ? WHERE user_id = ?").bind(role, userId).run();
 }
+
+export async function grantViewerAdminAccess(viewer: Viewer) {
+  await getRawDb().prepare("UPDATE users SET role = 'admin' WHERE user_id = ?")
+    .bind(viewer.userId)
+    .run();
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
@@ -42,12 +42,15 @@ export function QuoteTool() {
   const [demoRole, setDemoRole] = useState<Role>("admin");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [adminError, setAdminError] = useState("");
 
   const fetchSession = async () => {
     const response = await fetch("/api/session", { cache: "no-store" });
     if (response.status === 401) {
-      window.location.assign("/signin-with-chatgpt?return_to=%2F");
-      throw new Error("Sign in required");
+      throw new Error("Access required. Sign in through Cloudflare Access.");
     }
     if (!response.headers.get("content-type")?.includes("application/json")) {
       throw new Error("Unable to load the quote tool. Please refresh and sign in again.");
@@ -116,6 +119,30 @@ export function QuoteTool() {
   const flash = (text: string) => {
     setMessage(text);
     window.setTimeout(() => setMessage(""), 2800);
+  };
+
+  const requestAdminAccess = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAdminBusy(true);
+    setAdminError("");
+    try {
+      const response = await fetch("/api/admin-access", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: adminPassword }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Unable to enable administrator access");
+      await loadSession();
+      setAdminPassword("");
+      setAdminDialogOpen(false);
+      setTab("settings");
+      flash("Administrator access enabled");
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Unable to enable administrator access");
+    } finally {
+      setAdminBusy(false);
+    }
   };
 
   const saveQuote = async () => {
@@ -248,6 +275,11 @@ export function QuoteTool() {
                   <option value="admin">Administrator view</option><option value="user">Standard user view</option>
                 </select>
               </label>
+            )}
+            {session.viewer.role !== "admin" && !session.viewer.isLocalDemo && (
+              <button className="ghost-btn admin-access-trigger" onClick={() => { setAdminError(""); setAdminDialogOpen(true); }}>
+                Administrator access
+              </button>
             )}
             <button className="ghost-btn" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
             {tab === "quote" && <button className="primary-btn" disabled={busy} onClick={saveQuote}>{busy ? "Saving…" : "Save quote"}</button>}
@@ -412,6 +444,29 @@ export function QuoteTool() {
         )}
       </main>
 
+      {adminDialogOpen && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={() => !adminBusy && setAdminDialogOpen(false)}>
+          <section className="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="admin-dialog-icon">E3</div>
+            <div>
+              <h2 id="admin-dialog-title">Administrator access</h2>
+              <p>Enter the administrator password to manage base data and user access.</p>
+            </div>
+            <form onSubmit={requestAdminAccess}>
+              <label className="field">
+                <span>Administrator password</span>
+                <input autoFocus type="password" autoComplete="current-password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
+              </label>
+              {adminError && <p className="admin-dialog-error" role="alert">{adminError}</p>}
+              <div className="admin-dialog-actions">
+                <button type="button" className="ghost-btn" disabled={adminBusy} onClick={() => { setAdminDialogOpen(false); setAdminPassword(""); }}>Cancel</button>
+                <button type="submit" className="primary-btn" disabled={adminBusy || adminPassword.length === 0}>{adminBusy ? "Checking…" : "Continue as administrator"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
       {message && <div className="toast">{message}</div>}
     </div>
   );
@@ -424,10 +479,6 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
 function NumberInput({ value, onChange, prefix, suffix, compact }: { value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; compact?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(inputNumber(value));
-
-  useEffect(() => {
-    if (!editing) setDraft(inputNumber(value));
-  }, [editing, value]);
 
   const commit = () => {
     setEditing(false);
