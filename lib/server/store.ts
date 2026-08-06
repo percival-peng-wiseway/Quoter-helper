@@ -1,6 +1,6 @@
 import { getRawDb } from "../../db";
 import { getAuthenticatedAccount } from "./auth";
-import { defaultSettings } from "../defaults";
+import { defaultSettings, normalizeSettings } from "../defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../model";
 
 let schemaReady = false;
@@ -65,7 +65,7 @@ export async function getSettings(): Promise<AppSettings> {
   await ensureSchema();
   const row = await getRawDb().prepare("SELECT payload FROM app_settings WHERE id = 1")
     .first<{ payload: string }>();
-  return row ? JSON.parse(row.payload) as AppSettings : defaultSettings;
+  return row ? normalizeSettings(JSON.parse(row.payload) as AppSettings) : defaultSettings;
 }
 
 export async function updateSettings(viewer: Viewer, settings: AppSettings) {
@@ -73,11 +73,12 @@ export async function updateSettings(viewer: Viewer, settings: AppSettings) {
   const db = getRawDb();
   const previous = await db.prepare("SELECT payload FROM app_settings WHERE id = 1")
     .first<{ payload: string }>();
-  const previousSettings = previous ? JSON.parse(previous.payload) as AppSettings : defaultSettings;
-  const message = describeSettingsChange(previousSettings, settings);
+  const previousSettings = previous ? normalizeSettings(JSON.parse(previous.payload) as AppSettings) : defaultSettings;
+  const normalizedSettings = normalizeSettings(settings);
+  const message = describeSettingsChange(previousSettings, normalizedSettings);
   const updates = [db.prepare(`UPDATE app_settings
     SET payload = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1`)
-    .bind(JSON.stringify(settings), viewer.userId)
+    .bind(JSON.stringify(normalizedSettings), viewer.userId)
   ];
   if (message) {
     updates.push(db.prepare(`INSERT INTO system_notifications (id, message, created_by)
@@ -108,7 +109,7 @@ function describeSettingsChange(before: AppSettings, after: AppSettings): string
     ["panelBatchWatts", "Panel batch watts", number],
     ["panelBatchCost", "Panel batch cost", money],
     ["accessoryCostPerKw", "Accessories cost / kW", money],
-    ["solarInstallCostPerWatt", "Solar installation cost / W", money],
+    ["solarInstallCostPerKw", "Solar installation cost / PV system kW", money],
     ["batteryInstallCost", "Battery installation cost", money],
     ["deliveryCost", "Delivery cost", money],
     ["blinkFee", "Blink fee", money],

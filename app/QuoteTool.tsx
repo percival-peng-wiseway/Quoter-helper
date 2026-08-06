@@ -210,8 +210,8 @@ export function QuoteTool() {
     if (!isAdmin || !window.confirm(`Delete “${projectName}”? This cannot be undone.`)) return;
     setStatusBusyId(id);
     try {
-      const response = await fetch("/api/quotes", {
-        method: "DELETE",
+      const response = await fetch("/api/quotes/delete", {
+        method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id }),
       });
@@ -385,17 +385,17 @@ export function QuoteTool() {
                     </div>
                   </div>
                   <div className="funding-panel">
-                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>Discounts must be negative</small></div>
+                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>Enter deductions as positive amounts</small></div>
                     <div className="funding-grid">
                       <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />
                       <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />
                       <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
                       <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
                       <div className="funding-final-column totals-control">
-                        <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
+                        <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.max(0, v))} /></Field>
                         <div className="quote-total-chips">
-                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>After both STCs</small></div>
-                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>After both STCs</small></div>
+                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>After all deductions</small></div>
+                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>After all deductions</small></div>
                         </div>
                       </div>
                       <div className="balance-control">
@@ -428,6 +428,11 @@ export function QuoteTool() {
                 <Metric label="Gross Margin" value={money.format(result.grossMargin)} accent />
               </section>
 
+              <section className="customer-balance-summary" aria-label="Customer balance including GST">
+                <span>Customer balance <small>(incl. GST)</small></span>
+                <b>{money.format(inputs.customerBalance)}</b>
+              </section>
+
               <section className="target-card">
                 <span className="target-kicker">Reach {pct(settings.thresholds.target)} margin</span>
                 <h3>{money.format(result.targetRequiredBalance)}</h3>
@@ -437,7 +442,7 @@ export function QuoteTool() {
                 </div>
               </section>
 
-              <div className="formula-note"><b>Calculation basis</b><p>STC, GST, cost and margin relationships match the original workbook. The target balance is solved live and no longer relies on an Excel macro.</p></div>
+              <div className="formula-note"><b>Calculation basis</b><p>STCs, Solar VIC Rebate, Interest Free Loan and Discount are deducted consistently from totals and margin calculations. The target balance is solved live and no longer relies on an Excel macro.</p></div>
             </aside>
           </div>
         )}
@@ -457,7 +462,7 @@ export function QuoteTool() {
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
-                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, customItems: quote.payload.customItems ?? [] }); setTab("quote"); };
+                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, discount: Math.abs(quote.payload.discount ?? 0), customItems: quote.payload.customItems ?? [] }); setTab("quote"); };
                     return <div className="history-row" key={quote.id}>
                       <button className="history-main" onClick={openQuote}>
                         <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Created by {quote.ownerName}</small></span>
@@ -614,8 +619,8 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
         <Field label="Battery STC unit price"><NumberInput value={settings.batteryStcUnitPrice} prefix="$" onChange={(v) => update({ batteryStcUnitPrice: v })} /></Field>
         <Field label="Battery installation cost"><NumberInput value={settings.batteryInstallCost} prefix="$" onChange={(v) => update({ batteryInstallCost: v })} /></Field>
         <Field label="Delivery cost"><NumberInput value={settings.deliveryCost} prefix="$" onChange={(v) => update({ deliveryCost: v })} /></Field>
-        <Field label="Accessories cost / kW"><NumberInput value={settings.accessoryCostPerKw} prefix="$" onChange={(v) => update({ accessoryCostPerKw: v })} /></Field>
-        <Field label="Solar installation cost / W"><NumberInput value={settings.solarInstallCostPerWatt} prefix="$" onChange={(v) => update({ solarInstallCostPerWatt: v })} /></Field>
+        <Field label="Accessories unit cost"><NumberInput value={settings.accessoryCostPerKw} prefix="$" suffix="/ PV system kW" onChange={(v) => update({ accessoryCostPerKw: Math.max(0, v) })} /></Field>
+        <Field label="Solar installation unit cost"><NumberInput value={settings.solarInstallCostPerKw} prefix="$" suffix="/ PV system kW" onChange={(v) => update({ solarInstallCostPerKw: Math.max(0, v) })} /></Field>
       </div>
     </section>
     <div className="catalog-split">

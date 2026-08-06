@@ -21,7 +21,7 @@ export type AppSettings = {
   panelBatchWatts: number;
   panelBatchCost: number;
   accessoryCostPerKw: number;
-  solarInstallCostPerWatt: number;
+  solarInstallCostPerKw: number;
   batteryInstallCost: number;
   deliveryCost: number;
   blinkFee: number;

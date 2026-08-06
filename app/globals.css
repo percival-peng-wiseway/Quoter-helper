@@ -164,6 +164,10 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .metric.accent { margin: 2px -8px -5px; padding: 14px 8px 9px; border-top-color: #f0d3b9; color: var(--orange-dark); }
 .metric.accent span { color: var(--orange-dark); font-weight: 800; }
 .metric.accent b { font-size: 20px; }
+.customer-balance-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 66px; padding: 13px 18px; border: 1px solid #dce5df; border-radius: 12px; background: #fff; box-shadow: 0 4px 14px rgba(20,35,28,.035); }
+.customer-balance-summary span { color: #5e6d64; font-size: 12px; font-weight: 760; }
+.customer-balance-summary small { color: #8a958e; font-size: 10px; font-weight: 600; }
+.customer-balance-summary b { flex: 0 0 auto; color: var(--ink); font-size: 20px; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
 .target-card { padding: 22px; border: 1px solid #ead2bd; border-radius: 15px; background: linear-gradient(145deg, #fffdfb, #fff7f0); box-shadow: 0 8px 24px rgba(200,97,23,.055); }
 .target-kicker { color: var(--orange-dark); font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .target-card h3 { margin: 10px 0 3px; font-size: 32px; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }

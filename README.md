@@ -25,9 +25,9 @@ Local development uses the built-in local administrator identity. D1 data is sto
 - Assets binding: `ASSETS`
 - Images binding: `IMAGES`
 
-The application has four password accounts with fixed roles. Passwords are stored only as PBKDF2 hashes, successful sign-in creates a seven-day server-side session in D1, and the browser receives an HTTP-only session cookie. Repeated failed sign-in attempts are temporarily blocked.
+The application has five password accounts with fixed roles. Passwords are stored only as PBKDF2 hashes, successful sign-in creates a seven-day server-side session in D1, and the browser receives an HTTP-only session cookie. Repeated failed sign-in attempts are temporarily blocked.
 
-Standard users can create and manage their own quotes. Administrators can additionally manage base data and view the fixed account list. Account roles cannot be changed through the application.
+Standard users can view and edit shared team quotes. Administrators can additionally delete quotes, manage base data, and view the fixed account list. Account roles cannot be changed through the application.
 
 To change an account password, generate a new unique salt and PBKDF2-SHA256 hash and update the matching account entry in `lib/server/auth.ts`; never store plaintext passwords in the repository.
 

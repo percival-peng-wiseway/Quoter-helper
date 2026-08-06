@@ -42,6 +42,15 @@ const LOGIN_ACCOUNTS: LoginAccount[] = [
     passwordHash: "JDYKjlACbgDNICltvgdetIfRmltqz4Ydn3gxHEHv5/g=",
   },
   {
+    username: "kevin",
+    userId: "password-account:kevin",
+    email: "kevin@e3energy.com.au",
+    displayName: "Kevin",
+    role: "user",
+    salt: "63FRShjLx/UXbwgduqm8jA==",
+    passwordHash: "a9hrBfWiOBUCwtT5lb5OFk9IEDivhoWsuHeybDq95A4=",
+  },
+  {
     username: "hogan",
     userId: "password-account:hogan",
     email: "hogan@e3energy.com.au",

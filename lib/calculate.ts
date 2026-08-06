@@ -21,7 +21,7 @@ export function calculateQuote(
     battery: battery?.cost ?? 0,
     backup: manualCost("backup", 0),
     accessories: manualCost("accessories", pvSize * settings.accessoryCostPerKw),
-    solarInstallation: manualCost("solarInstallation", pvSize * 1000 * settings.solarInstallCostPerWatt),
+    solarInstallation: manualCost("solarInstallation", pvSize * settings.solarInstallCostPerKw),
     batteryInstallation: manualCost("batteryInstallation", settings.batteryInstallCost),
     delivery: manualCost("delivery", settings.deliveryCost),
     acCable: manualCost("acCable", 0),
@@ -36,8 +36,8 @@ export function calculateQuote(
     ["inverter", "Inverter", false],
     ["battery", "Battery", false],
     ["backup", "Backup", true],
-    ["accessories", "Accessories (cables, bracket, etc.)", true, `$${settings.accessoryCostPerKw.toFixed(0)} × PV system size · editable`],
-    ["solarInstallation", "Solar Installation", true, `$${settings.solarInstallCostPerWatt.toFixed(2)} × PV system size × 1000 · editable`],
+    ["accessories", "Accessories (cables, bracket, etc.)", true],
+    ["solarInstallation", "Solar Installation", true],
     ["batteryInstallation", "Battery Installation", true],
     ["delivery", "Delivery", true],
     ["acCable", "AC cable run", true],
@@ -78,14 +78,19 @@ export function calculateQuote(
   const solarStc = solarCertificates * settings.solarStcUnitPrice;
   const batteryCertificates = battery?.certificates ?? 0;
   const batteryStc = batteryCertificates * settings.batteryStcUnitPrice;
-  const otherFunding = finite(inputs.solarVicRebate) + finite(inputs.solarVicLoan) + Math.min(0, finite(inputs.discount));
-  const fundingTotal = solarStc + batteryStc + otherFunding;
+  const solarVicRebate = Math.max(0, finite(inputs.solarVicRebate));
+  const solarVicLoan = Math.max(0, finite(inputs.solarVicLoan));
+  // Older saved quotes used negative discounts. Treat either sign as a deduction.
+  const discount = Math.abs(finite(inputs.discount));
+  const additionalDeductions = solarVicRebate + solarVicLoan + discount;
+  const customerDeductions = solarStc + batteryStc + additionalDeductions;
+  const marginFundingTotal = solarStc + batteryStc - additionalDeductions;
 
   const sumNormalSales = normalItems.reduce((sum, item) => sum + item.salesPrice, 0);
   const sumAllCosts = lineItems.reduce((sum, item) => sum + item.cost, 0);
   const sumAllSales = lineItems.reduce((sum, item) => sum + item.salesPrice, 0);
-  const quoteRequiredBalance = sumNormalSales * (1 + settings.gstRate) + commission.salesPrice - fundingTotal;
-  const totalReceivedExGst = fundingTotal + finite(inputs.customerBalance) / (1 + settings.gstRate);
+  const quoteRequiredBalance = sumNormalSales * (1 + settings.gstRate) + commission.salesPrice - customerDeductions;
+  const totalReceivedExGst = marginFundingTotal + finite(inputs.customerBalance) / (1 + settings.gstRate);
   const totalCostExGst = normalItems.reduce((sum, item) => sum + item.cost, 0) + commission.cost / (1 + settings.gstRate);
   const gstPayment = finite(inputs.customerBalance) * settings.gstRate / (1 + settings.gstRate);
   const gstRefund = sumAllCosts * settings.gstRate;
@@ -96,7 +101,7 @@ export function calculateQuote(
   const requiredBalanceForMargin = (target: number) => {
     const denominator = 1 - settings.gstRate - target;
     const numerator = (1 + settings.gstRate) * (
-      totalCostExGst - gstRefund - fundingTotal * (1 - target)
+      totalCostExGst - gstRefund - marginFundingTotal * (1 - target)
     );
     return denominator <= 0 ? 0 : Math.max(0, numerator / denominator);
   };
@@ -122,8 +127,8 @@ export function calculateQuote(
     netGst,
     gstPayment,
     gstRefund,
-    lineItemCostTotal: sumAllCosts - solarStc - batteryStc,
-    lineItemSalesTotal: sumAllSales - solarStc - batteryStc,
+    lineItemCostTotal: sumAllCosts - customerDeductions,
+    lineItemSalesTotal: sumAllSales - customerDeductions,
     grossMargin,
     grossMarginRate,
     quoteRequiredBalance,
