@@ -32,7 +32,7 @@ export function calculateQuote(
   };
 
   const definitions: Array<[keyof typeof costs, string, boolean, string?]> = [
-    ["solarPanel", "Solar Panel", true, `${settings.panelBatchWatts}W panel batches`],
+    ["solarPanel", "Solar Panel", true],
     ["inverter", "Inverter", false],
     ["battery", "Battery", false],
     ["backup", "Backup", true],
