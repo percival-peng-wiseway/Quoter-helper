@@ -84,13 +84,13 @@ export function calculateQuote(
   const discount = Math.abs(finite(inputs.discount));
   const additionalDeductions = solarVicRebate + solarVicLoan + discount;
   const customerDeductions = solarStc + batteryStc + additionalDeductions;
-  const marginFundingTotal = solarStc + batteryStc - additionalDeductions;
+  const receivedFundingTotal = solarStc + batteryStc + solarVicRebate + solarVicLoan - discount;
 
   const sumNormalSales = normalItems.reduce((sum, item) => sum + item.salesPrice, 0);
   const sumAllCosts = lineItems.reduce((sum, item) => sum + item.cost, 0);
   const sumAllSales = lineItems.reduce((sum, item) => sum + item.salesPrice, 0);
   const quoteRequiredBalance = sumNormalSales * (1 + settings.gstRate) + commission.salesPrice - customerDeductions;
-  const totalReceivedExGst = marginFundingTotal + finite(inputs.customerBalance) / (1 + settings.gstRate);
+  const totalReceivedExGst = receivedFundingTotal + finite(inputs.customerBalance) / (1 + settings.gstRate);
   const totalCostExGst = normalItems.reduce((sum, item) => sum + item.cost, 0) + commission.cost / (1 + settings.gstRate);
   const gstPayment = finite(inputs.customerBalance) * settings.gstRate / (1 + settings.gstRate);
   const gstRefund = sumAllCosts * settings.gstRate;
@@ -101,7 +101,7 @@ export function calculateQuote(
   const requiredBalanceForMargin = (target: number) => {
     const denominator = 1 - settings.gstRate - target;
     const numerator = (1 + settings.gstRate) * (
-      totalCostExGst - gstRefund - marginFundingTotal * (1 - target)
+      totalCostExGst - gstRefund - receivedFundingTotal * (1 - target)
     );
     return denominator <= 0 ? 0 : Math.max(0, numerator / denominator);
   };
