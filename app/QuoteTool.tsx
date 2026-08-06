@@ -303,7 +303,13 @@ export function QuoteTool() {
                       <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />
                       <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
                       <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
-                      <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
+                      <div className="funding-final-column totals-control">
+                        <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
+                        <div className="quote-total-chips">
+                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>Excl. GST</small></div>
+                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>Excl. GST</small></div>
+                        </div>
+                      </div>
                       <div className="balance-control">
                         <Field label="Customer balance (incl. GST)"><NumberInput prefix="$" value={inputs.customerBalance} onChange={(v) => setField("customerBalance", v)} /></Field>
                         <div className="quick-margin-buttons">

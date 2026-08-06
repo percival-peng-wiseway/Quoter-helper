@@ -83,6 +83,7 @@ export function calculateQuote(
 
   const sumNormalSales = normalItems.reduce((sum, item) => sum + item.salesPrice, 0);
   const sumAllCosts = lineItems.reduce((sum, item) => sum + item.cost, 0);
+  const sumAllSales = lineItems.reduce((sum, item) => sum + item.salesPrice, 0);
   const quoteRequiredBalance = sumNormalSales * (1 + settings.gstRate) + commission.salesPrice - fundingTotal;
   const totalReceivedExGst = fundingTotal + finite(inputs.customerBalance) / (1 + settings.gstRate);
   const totalCostExGst = normalItems.reduce((sum, item) => sum + item.cost, 0) + commission.cost / (1 + settings.gstRate);
@@ -121,6 +122,8 @@ export function calculateQuote(
     netGst,
     gstPayment,
     gstRefund,
+    lineItemCostTotal: sumAllCosts,
+    lineItemSalesTotal: sumAllSales,
     grossMargin,
     grossMarginRate,
     quoteRequiredBalance,

@@ -111,6 +111,8 @@ export type CalculationResult = {
   netGst: number;
   gstPayment: number;
   gstRefund: number;
+  lineItemCostTotal: number;
+  lineItemSalesTotal: number;
   grossMargin: number;
   grossMarginRate: number;
   quoteRequiredBalance: number;
