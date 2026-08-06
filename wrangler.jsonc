@@ -5,6 +5,13 @@
   "workers_dev": true,
   "compatibility_date": "2026-05-15",
   "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "quote.e3energy.com.au",
+      "zone_name": "e3energy.com.au",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "binding": "ASSETS"
   },
