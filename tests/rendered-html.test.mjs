@@ -39,7 +39,7 @@ test("uses fixed password accounts with secure server-side sessions", async () =
   assert.match(auth, /username: "ruihan"[\s\S]*role: "user"/);
   assert.match(auth, /username: "hogan"[\s\S]*role: "admin"/);
   assert.match(auth, /username: "admin"[\s\S]*role: "admin"/);
-  assert.match(auth, /PBKDF2_ITERATIONS = 210_000/);
+  assert.match(auth, /PBKDF2_ITERATIONS = 100_000/);
   assert.match(auth, /e3-quoter-session/);
   assert.match(auth, /httpOnly:\s*true/);
   assert.match(auth, /MAX_LOGIN_FAILURES = 5/);

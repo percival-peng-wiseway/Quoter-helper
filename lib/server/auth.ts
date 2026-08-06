@@ -4,7 +4,8 @@ import type { Role } from "../model";
 
 const SESSION_COOKIE = "e3-quoter-session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
-const PBKDF2_ITERATIONS = 210_000;
+// Cloudflare Workers Web Crypto rejects PBKDF2 iteration counts above 100,000.
+const PBKDF2_ITERATIONS = 100_000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_BLOCK_MS = 15 * 60 * 1000;
 const MAX_LOGIN_FAILURES = 5;
@@ -29,7 +30,7 @@ const LOGIN_ACCOUNTS: LoginAccount[] = [
     displayName: "Sam",
     role: "user",
     salt: "hZFC0GJKkB+WkGAUck1Rmw==",
-    passwordHash: "EiRYEjauEqB3H0Q67FEvvroWWv7YqflMRbNdOVY39d8=",
+    passwordHash: "XOdL3EFo9MiexxPDov2sYuPT6pHhmgob36kcgCEDZUY=",
   },
   {
     username: "ruihan",
@@ -38,7 +39,7 @@ const LOGIN_ACCOUNTS: LoginAccount[] = [
     displayName: "Ruihan",
     role: "user",
     salt: "3fn1b1YfcAz7CQ890Dabkw==",
-    passwordHash: "a+eJ2lJk5o0srtUSKmHaReCTquOWxLzFeCSQ44vJmuY=",
+    passwordHash: "JDYKjlACbgDNICltvgdetIfRmltqz4Ydn3gxHEHv5/g=",
   },
   {
     username: "hogan",
@@ -47,7 +48,7 @@ const LOGIN_ACCOUNTS: LoginAccount[] = [
     displayName: "Hogan",
     role: "admin",
     salt: "HgMeLVZVFs2dZLroxJjCKw==",
-    passwordHash: "OCrVG3kASjjCTrqoDalTobByU+yTyeqfipEdw55ixsg=",
+    passwordHash: "J1UZHRn8bhFQJstVnDe7Nmdlcq4ERwbOoSrKGowS3HY=",
   },
   {
     username: "admin",
@@ -56,13 +57,13 @@ const LOGIN_ACCOUNTS: LoginAccount[] = [
     displayName: "Admin",
     role: "admin",
     salt: "G2ix9cx+lkma8yjoGj1uSw==",
-    passwordHash: "bZkX8IxotOQuqa9ZexOBu84T5CIvjN2iyTxZ62aamRA=",
+    passwordHash: "dyv6GusPJIZIC7ClN5trla8r8+aBQKIOKsD7XCHWwzo=",
   },
 ];
 
 const DUMMY_CREDENTIALS = {
   salt: "U5zvAHidSCsyQhVKZGjQLg==",
-  passwordHash: "atI3i7YFztJXtyKgSvw8X5k7DK34Bpy+1XwV8/6tXk8=",
+  passwordHash: "5VSCOiodI0soUqf7lH5IasXF0iUs6m8T28ft+YeDUZA=",
 };
 
 let authSchemaReady = false;
