@@ -1,11 +1,11 @@
 # E3 Quoter
 
-E3 Quoter is a vinext application for calculating solar and battery quote margins. It uses Cloudflare Workers for the application runtime, D1 for users, settings and saved quotes, and Cloudflare Access for user identity.
+E3 Quoter is a vinext application for calculating solar and battery quote margins. It uses Cloudflare Workers for the application runtime and D1 for users, settings and saved quotes.
 
 ## Requirements
 
 - Node.js `>=22.13.0`
-- A Cloudflare account with Workers, D1 and Access enabled
+- A Cloudflare account with Workers and D1 enabled
 
 ## Local development
 
@@ -25,9 +25,9 @@ Local development uses the built-in local administrator identity. D1 data is sto
 - Assets binding: `ASSETS`
 - Images binding: `IMAGES`
 
-The application accepts identity from Cloudflare Access through `cf-access-authenticated-user-email`. It also retains the OpenAI Sites identity headers for compatibility with the original hosted version.
+The application is publicly accessible by default. Each browser receives a long-lived, HTTP-only visitor cookie so saved quote history and administrator elevation remain separate between visitors. Public visitors always start as standard users and must enter the configured administrator password to manage base data or users.
 
-Protect the complete Worker with a Cloudflare Access application before sharing its URL. The first authenticated user becomes an administrator. Standard users can also choose **Administrator access** and enter the configured administrator password.
+If Cloudflare Access is enabled later, the application will use `cf-access-authenticated-user-email` as the visitor identity. It also retains the OpenAI Sites identity headers for compatibility with the original hosted version. The first authenticated user becomes an administrator; other users can choose **Administrator access** and enter the configured administrator password.
 
 Store the administrator password as a runtime secret; never commit it to this repository:
 

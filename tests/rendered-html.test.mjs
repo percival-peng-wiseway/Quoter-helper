@@ -25,17 +25,21 @@ test("builds the production Cloudflare bindings", async () => {
   ]);
 });
 
-test("uses Cloudflare identity and a runtime-only administrator secret", async () => {
-  const [auth, adminRoute, quoteTool, readme] = await Promise.all([
+test("supports public visitor sessions and a runtime-only administrator secret", async () => {
+  const [auth, store, adminRoute, quoteTool, readme] = await Promise.all([
     readFile(new URL("app/chatgpt-auth.ts", root), "utf8"),
+    readFile(new URL("lib/server/store.ts", root), "utf8"),
     readFile(new URL("app/api/admin-access/route.ts", root), "utf8"),
     readFile(new URL("app/QuoteTool.tsx", root), "utf8"),
     readFile(new URL("README.md", root), "utf8"),
   ]);
 
   assert.match(auth, /cf-access-authenticated-user-email/);
+  assert.match(auth, /e3-quoter-visitor/);
+  assert.match(auth, /httpOnly:\s*true/);
+  assert.match(store, /canBootstrapAdmin:\s*false/);
   assert.match(adminRoute, /env[\s\S]*ADMIN_PASSWORD/);
   assert.match(adminRoute, /crypto\.subtle\.digest/);
   assert.match(quoteTool, /Administrator access/);
-  assert.doesNotMatch(`${auth}\n${adminRoute}\n${quoteTool}\n${readme}`, /e3123/i);
+  assert.doesNotMatch(`${auth}\n${store}\n${adminRoute}\n${quoteTool}\n${readme}`, /e3123/i);
 });

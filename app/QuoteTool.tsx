@@ -50,7 +50,7 @@ export function QuoteTool() {
   const fetchSession = async () => {
     const response = await fetch("/api/session", { cache: "no-store" });
     if (response.status === 401) {
-      throw new Error("Access required. Sign in through Cloudflare Access.");
+      throw new Error("Unable to start your visitor session. Please refresh and try again.");
     }
     if (!response.headers.get("content-type")?.includes("application/json")) {
       throw new Error("Unable to load the quote tool. Please refresh and sign in again.");

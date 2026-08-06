@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 export type ChatGPTUser = {
   userId: string;
@@ -15,6 +15,9 @@ const USER_FULL_NAME_ENCODING_HEADER =
 const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
 const CLOUDFLARE_ACCESS_EMAIL_HEADER =
   "cf-access-authenticated-user-email";
+const PUBLIC_VISITOR_COOKIE = "e3-quoter-visitor";
+const PUBLIC_VISITOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const PUBLIC_VISITOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
@@ -46,6 +49,32 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     displayName: fullName ?? email,
     email,
     fullName,
+  };
+}
+
+export async function getPublicVisitor(): Promise<ChatGPTUser> {
+  const cookieStore = await cookies();
+  const existingVisitorId = cookieStore.get(PUBLIC_VISITOR_COOKIE)?.value;
+  const visitorId = existingVisitorId && PUBLIC_VISITOR_ID.test(existingVisitorId)
+    ? existingVisitorId
+    : crypto.randomUUID();
+
+  if (visitorId !== existingVisitorId) {
+    cookieStore.set(PUBLIC_VISITOR_COOKIE, visitorId, {
+      httpOnly: true,
+      maxAge: PUBLIC_VISITOR_COOKIE_MAX_AGE,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
+
+  const shortId = visitorId.slice(0, 8);
+  return {
+    userId: `public-visitor:${visitorId}`,
+    displayName: `Guest ${shortId}`,
+    email: `guest-${shortId}@public.invalid`,
+    fullName: null,
   };
 }
 

@@ -1,4 +1,4 @@
-import { getChatGPTUser } from "../../app/chatgpt-auth";
+import { getChatGPTUser, getPublicVisitor } from "../../app/chatgpt-auth";
 import { getRawDb } from "../../db";
 import { defaultSettings } from "../defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../model";
@@ -46,7 +46,7 @@ async function ensureSchema() {
 async function requestIdentity() {
   const authenticated = await getChatGPTUser();
   if (authenticated) {
-    return { ...authenticated, isLocalDemo: false };
+    return { ...authenticated, isLocalDemo: false, canBootstrapAdmin: true };
   }
   if (process.env.NODE_ENV !== "production") {
     return {
@@ -55,15 +55,16 @@ async function requestIdentity() {
       displayName: "Local Admin",
       fullName: "Local Admin",
       isLocalDemo: true,
+      canBootstrapAdmin: true,
     };
   }
-  return null;
+  const publicVisitor = await getPublicVisitor();
+  return { ...publicVisitor, isLocalDemo: false, canBootstrapAdmin: false };
 }
 
 export async function requireViewer(): Promise<Viewer> {
   await ensureSchema();
   const identity = await requestIdentity();
-  if (!identity) throw new Response("Authentication required", { status: 401 });
   const db = getRawDb();
 
   const existing = await db.prepare("SELECT user_id, email, display_name, role FROM users WHERE user_id = ?")
@@ -72,8 +73,16 @@ export async function requireViewer(): Promise<Viewer> {
 
   if (!existing) {
     await db.prepare(`INSERT INTO users (user_id, email, display_name, role)
-      SELECT ?, ?, ?, CASE WHEN NOT EXISTS (SELECT 1 FROM users) THEN 'admin' ELSE 'user' END`)
-      .bind(identity.userId, identity.email, identity.displayName)
+      SELECT ?, ?, ?, CASE
+        WHEN ? = 1 AND NOT EXISTS (SELECT 1 FROM users) THEN 'admin'
+        ELSE 'user'
+      END`)
+      .bind(
+        identity.userId,
+        identity.email,
+        identity.displayName,
+        identity.canBootstrapAdmin ? 1 : 0,
+      )
       .run();
   } else if (existing.email !== identity.email || existing.display_name !== identity.displayName) {
     await db.prepare("UPDATE users SET email = ?, display_name = ? WHERE user_id = ?")
