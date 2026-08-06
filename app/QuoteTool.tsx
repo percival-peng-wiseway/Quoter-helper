@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
+import { updatePvSize } from "../lib/quote-inputs";
 
 type UserRow = { userId: string; email: string; displayName: string; role: Role; createdAt: string };
 type SessionData = { viewer: Viewer; settings: AppSettings; quotes: QuoteRecord[]; users: UserRow[]; notifications: SystemNotification[] };
@@ -107,6 +108,9 @@ export function QuoteTool() {
   const setManualCost = (key: keyof QuoteInputs["manualCosts"], value: number) => {
     setInputs((current) => ({ ...current, manualCosts: { ...current.manualCosts, [key]: value } }));
   };
+  const setPvSize = (value: number) => {
+    setInputs((current) => updatePvSize(current, value));
+  };
   const addCustomItem = () => {
     setInputs((current) => ({
       ...current,
@@ -165,6 +169,11 @@ export function QuoteTool() {
   };
 
   const saveQuote = async () => {
+    if (!inputs.customerName.trim()) {
+      flash("Need a Customer Name");
+      document.getElementById("customer-name")?.focus();
+      return;
+    }
     setBusy(true);
     try {
       const response = await fetch("/api/quotes", {
@@ -345,14 +354,14 @@ export function QuoteTool() {
                   <div className="project-column customer-details">
                     <div className="column-label">Customer details</div>
                     <Field label="Date"><input type="date" value={inputs.date} onChange={(e) => setField("date", e.target.value)} /></Field>
-                    <Field label="Customer name"><input value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
+                    <Field label="Customer name"><input id="customer-name" required value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
                     <Field label="Phone"><input type="tel" value={inputs.phone ?? ""} placeholder="Enter phone number" onChange={(e) => setField("phone", e.target.value)} /></Field>
                     <Field label="Project address"><input value={inputs.address} placeholder="Enter installation address" onChange={(event) => setField("address", event.target.value)} /></Field>
                     <Field label="E³ Energy Initiator"><input value={inputs.initiator} placeholder="Enter owner name" onChange={(e) => setField("initiator", e.target.value)} /></Field>
                   </div>
                   <div className="project-column system-details">
                     <div className="column-label">System configuration</div>
-                    <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={(v) => setField("pvSize", v)} /></Field>
+                    <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={setPvSize} /></Field>
                     <Field label="Inverter"><select value={inputs.inverter} onChange={(e) => setField("inverter", e.target.value)}>{settings.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
                     <Field label="Battery size"><select value={inputs.batteryKwh} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{settings.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
                   </div>
@@ -366,6 +375,12 @@ export function QuoteTool() {
                     <div className="embedded-heading"><b>Quote items</b><div className="quote-items-actions"><small>Cost, margin and sales price</small><button type="button" className="add-item-btn" onClick={addCustomItem}>＋ Add item</button></div></div>
                     <div className="table-wrap">
                       <table className="quote-table">
+                        <colgroup>
+                          <col className="quote-item-column" />
+                          <col className="quote-cost-column" />
+                          <col className="quote-margin-column" />
+                          <col className="quote-sales-column" />
+                        </colgroup>
                         <thead><tr><th>Item</th><th>Cost (excl. GST)</th><th>Margin</th><th>Sales price (excl. GST)</th></tr></thead>
                         <tbody>
                           {result.lineItems.map((item) => {

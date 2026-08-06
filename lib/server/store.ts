@@ -195,8 +195,10 @@ export async function listQuotes(): Promise<QuoteRecord[]> {
 }
 
 export async function saveQuote(viewer: Viewer, id: string | null, payload: QuoteInputs): Promise<string> {
+  const customerName = payload.customerName.trim();
+  if (!customerName) throw Response.json({ error: "Need a Customer Name" }, { status: 400 });
   const quoteId = id ?? crypto.randomUUID();
-  const projectName = payload.customerName.trim() || payload.address.trim() || "Untitled quote";
+  const projectName = customerName;
   await getRawDb().prepare(`INSERT INTO quotes (id, owner_id, project_name, payload)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET project_name = excluded.project_name,

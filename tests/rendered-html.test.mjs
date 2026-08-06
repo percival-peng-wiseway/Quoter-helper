@@ -68,6 +68,10 @@ test("uses fixed password accounts with secure server-side sessions", async () =
   assert.match(quotesRoute, /deleteQuote\(viewer, body\.id\)/);
   assert.match(quoteDeleteRoute, /export async function POST/);
   assert.match(quoteDeleteRoute, /deleteQuote\(viewer, body\.id\)/);
+  assert.match(quotesRoute, /Need a Customer Name/);
+  assert.match(store, /Need a Customer Name/);
+  assert.match(quoteTool, /flash\("Need a Customer Name"\)/);
+  assert.match(quoteTool, /id="customer-name" required/);
   assert.match(migration, /CREATE TABLE `auth_sessions`/);
   assert.match(migration, /CREATE TABLE `login_attempts`/);
   assert.doesNotMatch(auth, /password:\s*["']/i);
@@ -126,12 +130,22 @@ test("deducts VIC rebate, VIC loan and discount from totals and margins", async 
 
 test("uses editable per-kW base rates without exposing formulas in the calculator", async () => {
   const { defaultSettings, normalizeSettings } = await loadTypeScriptModule("lib/defaults.ts");
+  const { updatePvSize } = await loadTypeScriptModule("lib/quote-inputs.ts");
   const legacySettings = { ...defaultSettings, solarInstallCostPerWatt: 0.3 };
   delete legacySettings.solarInstallCostPerKw;
   const normalized = normalizeSettings(legacySettings);
   assert.equal(normalized.accessoryCostPerKw, 95);
   assert.equal(normalized.solarInstallCostPerKw, 300);
   assert.equal("solarInstallCostPerWatt" in normalized, false);
+
+  const resized = updatePvSize({
+    ...defaultQuoteForPvSizeTest(),
+    pvSize: 6.6,
+    manualCosts: { ...defaultQuoteForPvSizeTest().manualCosts, accessories: 500, solarInstallation: 1200 },
+  }, 10);
+  assert.equal(resized.pvSize, 10);
+  assert.equal(resized.manualCosts.accessories, undefined);
+  assert.equal(resized.manualCosts.solarInstallation, undefined);
 
   const [calculate, quoteTool] = await Promise.all([
     readFile(new URL("lib/calculate.ts", root), "utf8"),
@@ -143,6 +157,27 @@ test("uses editable per-kW base rates without exposing formulas in the calculato
   assert.match(quoteTool, /Accessories unit cost/);
   assert.match(quoteTool, /Solar installation unit cost/);
   assert.match(quoteTool, /\/ PV system kW/);
+  assert.match(quoteTool, /onChange=\{setPvSize\}/);
+  assert.match(quoteTool, /quote-cost-column/);
   assert.match(quoteTool, /customer-balance-summary/);
   assert.match(quoteTool, /Customer balance <small>\(incl\. GST\)<\/small>/);
 });
+
+function defaultQuoteForPvSizeTest() {
+  return {
+    date: "2026-08-06",
+    customerName: "PV size test",
+    phone: "",
+    address: "",
+    pvSize: 0,
+    batteryKwh: 0,
+    inverter: "",
+    initiator: "",
+    customerBalance: 0,
+    solarVicRebate: 0,
+    solarVicLoan: 0,
+    discount: 0,
+    customItems: [],
+    manualCosts: { backup: 0, acCable: 0, switchboard: 0, subSwitchboard: 0, externalCommission: 0 },
+  };
+}
