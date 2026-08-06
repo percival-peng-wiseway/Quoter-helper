@@ -77,7 +77,7 @@ test("uses fixed password accounts with secure server-side sessions", async () =
   assert.doesNotMatch(auth, /password:\s*["']/i);
 });
 
-test("deducts VIC rebate, VIC loan and discount from totals and margins", async () => {
+test("adds VIC funding and deducts discount from total received and margins", async () => {
   const { calculateQuote } = await loadTypeScriptModule("lib/calculate.ts");
   const settings = {
     thresholds: { approval: 0.22, target: 0.25 },
@@ -121,11 +121,30 @@ test("deducts VIC rebate, VIC loan and discount from totals and margins", async 
   assert.equal(before.lineItemCostTotal - after.lineItemCostTotal, 35);
   assert.equal(before.lineItemSalesTotal - after.lineItemSalesTotal, 35);
   assert.equal(before.quoteRequiredBalance - after.quoteRequiredBalance, 35);
-  assert.equal(before.totalReceivedExGst - after.totalReceivedExGst, 35);
-  assert.equal(before.grossMargin - after.grossMargin, 35);
-  assert.ok(after.grossMarginRate < before.grossMarginRate);
-  assert.ok(after.targetRequiredBalance > before.targetRequiredBalance);
+  assert.ok(Math.abs((after.totalReceivedExGst - before.totalReceivedExGst) - 25) < 1e-9);
+  assert.ok(Math.abs((after.grossMargin - before.grossMargin) - 25) < 1e-9);
+  assert.ok(after.grossMarginRate > before.grossMarginRate);
+  assert.ok(after.targetRequiredBalance < before.targetRequiredBalance);
   assert.equal(legacyNegativeDiscount.grossMargin, after.grossMargin);
+
+  const funded = calculateQuote({
+    ...inputs,
+    customerBalance: 110,
+    solarVicRebate: 30,
+    solarVicLoan: 40,
+    discount: 5,
+    batteryKwh: 1,
+  }, {
+    ...settings,
+    solarStcUnitPrice: 10,
+    batteryStcUnitPrice: 20,
+    stcScaleFactor: 1,
+    stcYears: 1,
+    batteries: [{ name: "Test battery", kwh: 1, certificates: 5, cost: 0 }],
+  });
+  assert.equal(funded.solarStc, 10);
+  assert.equal(funded.batteryStc, 100);
+  assert.equal(funded.totalReceivedExGst, 275);
 });
 
 test("uses editable per-kW base rates without exposing formulas in the calculator", async () => {

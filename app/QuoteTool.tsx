@@ -457,7 +457,7 @@ export function QuoteTool() {
                 </div>
               </section>
 
-              <div className="formula-note"><b>Calculation basis</b><p>STCs, Solar VIC Rebate, Interest Free Loan and Discount are deducted consistently from totals and margin calculations. The target balance is solved live and no longer relies on an Excel macro.</p></div>
+              <div className="formula-note"><b>Calculation basis</b><p>Total received includes the customer balance, both STCs, Solar VIC Rebate and Interest Free Loan, less Discount. The target balance is solved live and no longer relies on an Excel macro.</p></div>
             </aside>
           </div>
         )}
