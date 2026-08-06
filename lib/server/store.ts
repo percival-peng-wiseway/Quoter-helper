@@ -1,6 +1,6 @@
-import { getChatGPTUser, getPublicVisitor } from "../../app/chatgpt-auth";
 import { getRawDb } from "../../db";
-import { defaultSettings } from "../defaults";
+import { getAuthenticatedAccount } from "./auth";
+import { defaultSettings, normalizeSettings } from "../defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../model";
 
 let schemaReady = false;
@@ -43,68 +43,21 @@ async function ensureSchema() {
   schemaReady = true;
 }
 
-async function requestIdentity() {
-  const authenticated = await getChatGPTUser();
-  if (authenticated) {
-    return { ...authenticated, isLocalDemo: false, canBootstrapAdmin: true };
-  }
-  if (process.env.NODE_ENV !== "production") {
-    return {
-      userId: "local-demo-admin",
-      email: "admin@local.preview",
-      displayName: "Local Admin",
-      fullName: "Local Admin",
-      isLocalDemo: true,
-      canBootstrapAdmin: true,
-    };
-  }
-  const publicVisitor = await getPublicVisitor();
-  return { ...publicVisitor, isLocalDemo: false, canBootstrapAdmin: false };
-}
-
 export async function requireViewer(): Promise<Viewer> {
   await ensureSchema();
-  const identity = await requestIdentity();
-  const db = getRawDb();
+  const identity = await getAuthenticatedAccount();
+  if (!identity) throw new Response("Authentication required", { status: 401 });
 
-  const existing = await db.prepare("SELECT user_id, email, display_name, role FROM users WHERE user_id = ?")
-    .bind(identity.userId)
-    .first<{ user_id: string; email: string; display_name: string; role: Role }>();
-
-  if (!existing) {
-    await db.prepare(`INSERT INTO users (user_id, email, display_name, role)
-      SELECT ?, ?, ?, CASE
-        WHEN ? = 1 AND NOT EXISTS (SELECT 1 FROM users) THEN 'admin'
-        ELSE 'user'
-      END`)
-      .bind(
-        identity.userId,
-        identity.email,
-        identity.displayName,
-        identity.canBootstrapAdmin ? 1 : 0,
-      )
-      .run();
-  } else if (existing.email !== identity.email || existing.display_name !== identity.displayName) {
-    await db.prepare("UPDATE users SET email = ?, display_name = ? WHERE user_id = ?")
-      .bind(identity.email, identity.displayName, identity.userId)
-      .run();
-  }
-
-  const row = await db.prepare("SELECT user_id, email, display_name, role FROM users WHERE user_id = ?")
-    .bind(identity.userId)
-    .first<{ user_id: string; email: string; display_name: string; role: Role }>();
-  if (!row) throw new Error("Unable to initialize user account");
-
-  await db.prepare("INSERT OR IGNORE INTO app_settings (id, payload, updated_by) VALUES (1, ?, ?)")
+  await getRawDb().prepare("INSERT OR IGNORE INTO app_settings (id, payload, updated_by) VALUES (1, ?, ?)")
     .bind(JSON.stringify(defaultSettings), identity.userId)
     .run();
 
   return {
-    userId: row.user_id,
-    email: row.email,
-    displayName: row.display_name,
-    role: row.role,
-    isLocalDemo: identity.isLocalDemo,
+    userId: identity.userId,
+    email: identity.email,
+    displayName: identity.displayName,
+    role: identity.role,
+    isLocalDemo: false,
   };
 }
 
@@ -112,7 +65,7 @@ export async function getSettings(): Promise<AppSettings> {
   await ensureSchema();
   const row = await getRawDb().prepare("SELECT payload FROM app_settings WHERE id = 1")
     .first<{ payload: string }>();
-  return row ? JSON.parse(row.payload) as AppSettings : defaultSettings;
+  return row ? normalizeSettings(JSON.parse(row.payload) as AppSettings) : defaultSettings;
 }
 
 export async function updateSettings(viewer: Viewer, settings: AppSettings) {
@@ -120,11 +73,12 @@ export async function updateSettings(viewer: Viewer, settings: AppSettings) {
   const db = getRawDb();
   const previous = await db.prepare("SELECT payload FROM app_settings WHERE id = 1")
     .first<{ payload: string }>();
-  const previousSettings = previous ? JSON.parse(previous.payload) as AppSettings : defaultSettings;
-  const message = describeSettingsChange(previousSettings, settings);
+  const previousSettings = previous ? normalizeSettings(JSON.parse(previous.payload) as AppSettings) : defaultSettings;
+  const normalizedSettings = normalizeSettings(settings);
+  const message = describeSettingsChange(previousSettings, normalizedSettings);
   const updates = [db.prepare(`UPDATE app_settings
     SET payload = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1`)
-    .bind(JSON.stringify(settings), viewer.userId)
+    .bind(JSON.stringify(normalizedSettings), viewer.userId)
   ];
   if (message) {
     updates.push(db.prepare(`INSERT INTO system_notifications (id, message, created_by)
@@ -155,7 +109,7 @@ function describeSettingsChange(before: AppSettings, after: AppSettings): string
     ["panelBatchWatts", "Panel batch watts", number],
     ["panelBatchCost", "Panel batch cost", money],
     ["accessoryCostPerKw", "Accessories cost / kW", money],
-    ["solarInstallCostPerWatt", "Solar installation cost / W", money],
+    ["solarInstallCostPerKw", "Solar installation cost / PV system kW", money],
     ["batteryInstallCost", "Battery installation cost", money],
     ["deliveryCost", "Delivery cost", money],
     ["blinkFee", "Blink fee", money],
@@ -222,14 +176,17 @@ export async function listNotifications(): Promise<SystemNotification[]> {
   }));
 }
 
-export async function listQuotes(viewer: Viewer): Promise<QuoteRecord[]> {
-  const result = await getRawDb().prepare(`SELECT id, project_name, status, payload, created_at, updated_at
-    FROM quotes WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 20`)
-    .bind(viewer.userId)
-    .all<{ id: string; project_name: string; status: QuoteStatus; payload: string; created_at: string; updated_at: string }>();
+export async function listQuotes(): Promise<QuoteRecord[]> {
+  const result = await getRawDb().prepare(`SELECT q.id, q.project_name, q.status, q.payload,
+      q.created_at, q.updated_at, COALESCE(u.display_name, 'Former user') AS owner_name
+    FROM quotes q
+    LEFT JOIN users u ON u.user_id = q.owner_id
+    ORDER BY q.updated_at DESC`)
+    .all<{ id: string; project_name: string; owner_name: string; status: QuoteStatus; payload: string; created_at: string; updated_at: string }>();
   return result.results.map((row) => ({
     id: row.id,
     projectName: row.project_name,
+    ownerName: row.owner_name,
     status: row.status,
     payload: JSON.parse(row.payload) as QuoteInputs,
     createdAt: row.created_at,
@@ -238,13 +195,10 @@ export async function listQuotes(viewer: Viewer): Promise<QuoteRecord[]> {
 }
 
 export async function saveQuote(viewer: Viewer, id: string | null, payload: QuoteInputs): Promise<string> {
+  const customerName = payload.customerName.trim();
+  if (!customerName) throw Response.json({ error: "Need a Customer Name" }, { status: 400 });
   const quoteId = id ?? crypto.randomUUID();
-  const existing = await getRawDb().prepare("SELECT owner_id FROM quotes WHERE id = ?")
-    .bind(quoteId)
-    .first<{ owner_id: string }>();
-  if (existing && existing.owner_id !== viewer.userId) throw new Response("Forbidden", { status: 403 });
-
-  const projectName = payload.customerName.trim() || payload.address.trim() || "Untitled quote";
+  const projectName = customerName;
   await getRawDb().prepare(`INSERT INTO quotes (id, owner_id, project_name, payload)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET project_name = excluded.project_name,
@@ -254,21 +208,29 @@ export async function saveQuote(viewer: Viewer, id: string | null, payload: Quot
   return quoteId;
 }
 
-export async function updateQuoteStatus(viewer: Viewer, id: string, status: QuoteStatus) {
-  const existing = await getRawDb().prepare("SELECT owner_id FROM quotes WHERE id = ?")
+export async function updateQuoteStatus(_viewer: Viewer, id: string, status: QuoteStatus) {
+  const existing = await getRawDb().prepare("SELECT id FROM quotes WHERE id = ?")
     .bind(id)
-    .first<{ owner_id: string }>();
+    .first<{ id: string }>();
   if (!existing) throw new Response("Quote not found", { status: 404 });
-  if (existing.owner_id !== viewer.userId) throw new Response("Forbidden", { status: 403 });
   await getRawDb().prepare("UPDATE quotes SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .bind(status, id)
     .run();
 }
 
+export async function deleteQuote(viewer: Viewer, id: string) {
+  if (viewer.role !== "admin") throw new Response("Forbidden", { status: 403 });
+  const existing = await getRawDb().prepare("SELECT id FROM quotes WHERE id = ?")
+    .bind(id)
+    .first<{ id: string }>();
+  if (!existing) throw new Response("Quote not found", { status: 404 });
+  await getRawDb().prepare("DELETE FROM quotes WHERE id = ?").bind(id).run();
+}
+
 export async function listUsers(viewer: Viewer) {
   if (viewer.role !== "admin") return [];
   const result = await getRawDb().prepare(`SELECT user_id, email, display_name, role, created_at
-    FROM users ORDER BY created_at ASC`).all<{
+    FROM users WHERE user_id LIKE 'password-account:%' ORDER BY created_at ASC`).all<{
       user_id: string; email: string; display_name: string; role: Role; created_at: string;
     }>();
   return result.results.map((row) => ({
@@ -278,18 +240,4 @@ export async function listUsers(viewer: Viewer) {
     role: row.role,
     createdAt: row.created_at,
   }));
-}
-
-export async function updateUserRole(viewer: Viewer, userId: string, role: Role) {
-  if (viewer.role !== "admin") throw new Response("Forbidden", { status: 403 });
-  if (viewer.userId === userId && role !== "admin") {
-    throw new Response("You cannot remove your own administrator access", { status: 400 });
-  }
-  await getRawDb().prepare("UPDATE users SET role = ? WHERE user_id = ?").bind(role, userId).run();
-}
-
-export async function grantViewerAdminAccess(viewer: Viewer) {
-  await getRawDb().prepare("UPDATE users SET role = 'admin' WHERE user_id = ?")
-    .bind(viewer.userId)
-    .run();
 }

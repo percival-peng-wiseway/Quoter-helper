@@ -21,7 +21,7 @@ export type AppSettings = {
   panelBatchWatts: number;
   panelBatchCost: number;
   accessoryCostPerKw: number;
-  solarInstallCostPerWatt: number;
+  solarInstallCostPerKw: number;
   batteryInstallCost: number;
   deliveryCost: number;
   blinkFee: number;
@@ -67,6 +67,7 @@ export type QuoteInputs = {
 export type QuoteRecord = {
   id: string;
   projectName: string;
+  ownerName: string;
   status: QuoteStatus;
   payload: QuoteInputs;
   createdAt: string;

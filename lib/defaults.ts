@@ -10,7 +10,7 @@ export const defaultSettings: AppSettings = {
   panelBatchWatts: 475,
   panelBatchCost: 125,
   accessoryCostPerKw: 95,
-  solarInstallCostPerWatt: 0.3,
+  solarInstallCostPerKw: 300,
   batteryInstallCost: 1800,
   deliveryCost: 200,
   blinkFee: 300,
@@ -59,6 +59,23 @@ export const defaultSettings: AppSettings = {
     cost: units * 1479,
   })),
 };
+
+type LegacyAppSettings = Omit<AppSettings, "solarInstallCostPerKw"> & {
+  solarInstallCostPerKw?: number;
+  solarInstallCostPerWatt?: number;
+};
+
+export function normalizeSettings(input: AppSettings | LegacyAppSettings): AppSettings {
+  const stored = input as AppSettings & { solarInstallCostPerWatt?: number };
+  const solarInstallCostPerKw = Number.isFinite(stored.solarInstallCostPerKw)
+    ? stored.solarInstallCostPerKw
+    : Number.isFinite(stored.solarInstallCostPerWatt)
+      ? stored.solarInstallCostPerWatt! * 1000
+      : defaultSettings.solarInstallCostPerKw;
+  const normalized = { ...stored, solarInstallCostPerKw } as AppSettings & Record<string, unknown>;
+  delete normalized.solarInstallCostPerWatt;
+  return normalized;
+}
 
 export const defaultQuote: QuoteInputs = {
   date: "",

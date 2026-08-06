@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
+import { updatePvSize } from "../lib/quote-inputs";
 
 type UserRow = { userId: string; email: string; displayName: string; role: Role; createdAt: string };
 type SessionData = { viewer: Viewer; settings: AppSettings; quotes: QuoteRecord[]; users: UserRow[]; notifications: SystemNotification[] };
@@ -39,40 +40,47 @@ export function QuoteTool() {
   const [tab, setTab] = useState<Tab>("quote");
   const [quoteSearch, setQuoteSearch] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
-  const [demoRole, setDemoRole] = useState<Role>("admin");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminBusy, setAdminBusy] = useState(false);
-  const [adminError, setAdminError] = useState("");
+  const [loginRequired, setLoginRequired] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
 
   const fetchSession = async () => {
     const response = await fetch("/api/session", { cache: "no-store" });
-    if (response.status === 401) {
-      throw new Error("Unable to start your visitor session. Please refresh and try again.");
-    }
+    if (response.status === 401) return null;
     if (!response.headers.get("content-type")?.includes("application/json")) {
       throw new Error("Unable to load the quote tool. Please refresh and sign in again.");
     }
     const data = await response.json() as SessionData & { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Unable to load data");
-    return data;
+    return data as SessionData;
   };
 
   const loadSession = async () => {
     const data = await fetchSession();
+    if (!data) {
+      setSession(null);
+      setLoginRequired(true);
+      return;
+    }
     setSession(data);
     setSettingsDraft(structuredClone(data.settings));
-    setDemoRole(data.viewer.role);
+    setLoginRequired(false);
   };
 
   useEffect(() => {
     void fetchSession()
       .then((data) => {
+        if (!data) {
+          setLoginRequired(true);
+          return;
+        }
         setSession(data);
         setSettingsDraft(structuredClone(data.settings));
-        setDemoRole(data.viewer.role);
+        setLoginRequired(false);
       })
       .catch((error) => setMessage(error instanceof Error ? error.message : "Unable to load data"));
   }, []);
@@ -88,9 +96,10 @@ export function QuoteTool() {
       quote.payload.address,
       quote.payload.phone,
       quote.payload.initiator,
+      quote.ownerName,
     ].some((value) => String(value ?? "").toLowerCase().includes(query)));
   }, [quoteSearch, session?.quotes]);
-  const role = session?.viewer.isLocalDemo ? demoRole : session?.viewer.role ?? "user";
+  const role = session?.viewer.role ?? "user";
   const isAdmin = role === "admin";
 
   const setField = <K extends keyof QuoteInputs>(key: K, value: QuoteInputs[K]) => {
@@ -98,6 +107,9 @@ export function QuoteTool() {
   };
   const setManualCost = (key: keyof QuoteInputs["manualCosts"], value: number) => {
     setInputs((current) => ({ ...current, manualCosts: { ...current.manualCosts, [key]: value } }));
+  };
+  const setPvSize = (value: number) => {
+    setInputs((current) => updatePvSize(current, value));
   };
   const addCustomItem = () => {
     setInputs((current) => ({
@@ -121,31 +133,47 @@ export function QuoteTool() {
     window.setTimeout(() => setMessage(""), 2800);
   };
 
-  const requestAdminAccess = async (event: FormEvent<HTMLFormElement>) => {
+  const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAdminBusy(true);
-    setAdminError("");
+    setLoginBusy(true);
+    setLoginError("");
     try {
-      const response = await fetch("/api/admin-access", {
+      const response = await fetch("/api/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
       });
       const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Unable to enable administrator access");
+      if (!response.ok) throw new Error(data.error ?? "Unable to sign in");
       await loadSession();
-      setAdminPassword("");
-      setAdminDialogOpen(false);
-      setTab("settings");
-      flash("Administrator access enabled");
+      setLoginPassword("");
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : "Unable to enable administrator access");
+      setLoginError(error instanceof Error ? error.message : "Unable to sign in");
     } finally {
-      setAdminBusy(false);
+      setLoginBusy(false);
+    }
+  };
+
+  const signOut = async () => {
+    setBusy(true);
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } finally {
+      setSession(null);
+      setSettingsDraft(null);
+      setLoginPassword("");
+      setLoginRequired(true);
+      setTab("quote");
+      setBusy(false);
     }
   };
 
   const saveQuote = async () => {
+    if (!inputs.customerName.trim()) {
+      flash("Need a Customer Name");
+      document.getElementById("customer-name")?.focus();
+      return;
+    }
     setBusy(true);
     try {
       const response = await fetch("/api/quotes", {
@@ -187,6 +215,33 @@ export function QuoteTool() {
     }
   };
 
+  const removeQuote = async (id: string, projectName: string) => {
+    if (!isAdmin || !window.confirm(`Delete “${projectName}”? This cannot be undone.`)) return;
+    setStatusBusyId(id);
+    try {
+      const response = await fetch("/api/quotes/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Unable to delete quote");
+      setSession((current) => current ? {
+        ...current,
+        quotes: current.quotes.filter((quote) => quote.id !== id),
+      } : current);
+      if (quoteId === id) {
+        setQuoteId(null);
+        setInputs(freshQuote());
+      }
+      flash("Quote deleted");
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Unable to delete quote");
+    } finally {
+      setStatusBusyId("");
+    }
+  };
+
   const saveSettings = async () => {
     if (!settingsDraft || !isAdmin) return;
     setBusy(true);
@@ -207,10 +262,24 @@ export function QuoteTool() {
     }
   };
 
+  if (loginRequired) {
+    return (
+      <LoginScreen
+        username={loginUsername}
+        password={loginPassword}
+        busy={loginBusy}
+        error={loginError}
+        onUsernameChange={setLoginUsername}
+        onPasswordChange={setLoginPassword}
+        onSubmit={signIn}
+      />
+    );
+  }
+
   if (!session || !settings || !result || !settingsDraft) {
     return (
       <main className="loading-screen">
-        <div className="brand-mark large">E3</div>
+        <span className="brand-logo-badge large" role="img" aria-label="E3 Energy" />
         <div><strong>E3 Quoter</strong><p>{message || "Syncing the quote model…"}</p></div>
       </main>
     );
@@ -224,7 +293,7 @@ export function QuoteTool() {
 
   const navItems: Array<{ id: Tab; label: string; glyph: string; admin?: boolean }> = [
     { id: "quote", label: "Quote calculator", glyph: "⌁" },
-    { id: "history", label: "My quotes", glyph: "◷" },
+    { id: "history", label: "Team quotes", glyph: "◷" },
     { id: "settings", label: "Base data", glyph: "◇", admin: true },
     { id: "users", label: "User access", glyph: "◎", admin: true },
   ];
@@ -233,7 +302,7 @@ export function QuoteTool() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">E3</span><span><b>E3 Quoter</b></span></div>
+        <div className="brand"><span className="brand-logo-badge" role="img" aria-label="E3 Energy" /><span><b>E3 Quoter</b></span></div>
         <nav>
           {navItems.filter((item) => !item.admin || isAdmin).map((item) => (
             <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>
@@ -266,22 +335,11 @@ export function QuoteTool() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <h1>{tab === "quote" ? "Quote Table" : tab === "history" ? "My quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
+            <h1>{tab === "quote" ? "Quote Table" : tab === "history" ? "Team quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
           </div>
           <div className="top-actions">
-            {session.viewer.isLocalDemo && (
-              <label className="demo-switch">Local demo
-                <select value={demoRole} onChange={(event) => { setDemoRole(event.target.value as Role); setTab("quote"); }}>
-                  <option value="admin">Administrator view</option><option value="user">Standard user view</option>
-                </select>
-              </label>
-            )}
-            {session.viewer.role !== "admin" && !session.viewer.isLocalDemo && (
-              <button className="ghost-btn admin-access-trigger" onClick={() => { setAdminError(""); setAdminDialogOpen(true); }}>
-                Administrator access
-              </button>
-            )}
-            <button className="ghost-btn" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
+            <button className="ghost-btn mobile-hide" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
+            <button className="ghost-btn" disabled={busy} onClick={() => void signOut()}>Sign out</button>
             {tab === "quote" && <button className="primary-btn" disabled={busy} onClick={saveQuote}>{busy ? "Saving…" : "Save quote"}</button>}
             {tab === "settings" && isAdmin && <button className="primary-btn" disabled={busy} onClick={saveSettings}>{busy ? "Publishing…" : "Publish changes"}</button>}
           </div>
@@ -296,14 +354,14 @@ export function QuoteTool() {
                   <div className="project-column customer-details">
                     <div className="column-label">Customer details</div>
                     <Field label="Date"><input type="date" value={inputs.date} onChange={(e) => setField("date", e.target.value)} /></Field>
-                    <Field label="Customer name"><input value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
+                    <Field label="Customer name"><input id="customer-name" required value={inputs.customerName} placeholder="Enter customer name" onChange={(e) => setField("customerName", e.target.value)} /></Field>
                     <Field label="Phone"><input type="tel" value={inputs.phone ?? ""} placeholder="Enter phone number" onChange={(e) => setField("phone", e.target.value)} /></Field>
                     <Field label="Project address"><input value={inputs.address} placeholder="Enter installation address" onChange={(event) => setField("address", event.target.value)} /></Field>
                     <Field label="E³ Energy Initiator"><input value={inputs.initiator} placeholder="Enter owner name" onChange={(e) => setField("initiator", e.target.value)} /></Field>
                   </div>
                   <div className="project-column system-details">
                     <div className="column-label">System configuration</div>
-                    <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={(v) => setField("pvSize", v)} /></Field>
+                    <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={setPvSize} /></Field>
                     <Field label="Inverter"><select value={inputs.inverter} onChange={(e) => setField("inverter", e.target.value)}>{settings.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
                     <Field label="Battery size"><select value={inputs.batteryKwh} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{settings.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
                   </div>
@@ -317,6 +375,12 @@ export function QuoteTool() {
                     <div className="embedded-heading"><b>Quote items</b><div className="quote-items-actions"><small>Cost, margin and sales price</small><button type="button" className="add-item-btn" onClick={addCustomItem}>＋ Add item</button></div></div>
                     <div className="table-wrap">
                       <table className="quote-table">
+                        <colgroup>
+                          <col className="quote-item-column" />
+                          <col className="quote-cost-column" />
+                          <col className="quote-margin-column" />
+                          <col className="quote-sales-column" />
+                        </colgroup>
                         <thead><tr><th>Item</th><th>Cost (excl. GST)</th><th>Margin</th><th>Sales price (excl. GST)</th></tr></thead>
                         <tbody>
                           {result.lineItems.map((item) => {
@@ -336,17 +400,17 @@ export function QuoteTool() {
                     </div>
                   </div>
                   <div className="funding-panel">
-                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>Discounts must be negative</small></div>
+                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>Enter deductions as positive amounts</small></div>
                     <div className="funding-grid">
                       <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />
                       <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />
                       <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
                       <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
                       <div className="funding-final-column totals-control">
-                        <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.min(0, v))} /></Field>
+                        <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.max(0, v))} /></Field>
                         <div className="quote-total-chips">
-                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>After both STCs</small></div>
-                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>After both STCs</small></div>
+                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>After all deductions</small></div>
+                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>After all deductions</small></div>
                         </div>
                       </div>
                       <div className="balance-control">
@@ -379,6 +443,11 @@ export function QuoteTool() {
                 <Metric label="Gross Margin" value={money.format(result.grossMargin)} accent />
               </section>
 
+              <section className="customer-balance-summary" aria-label="Customer balance including GST">
+                <span>Customer balance <small>(incl. GST)</small></span>
+                <b>{money.format(inputs.customerBalance)}</b>
+              </section>
+
               <section className="target-card">
                 <span className="target-kicker">Reach {pct(settings.thresholds.target)} margin</span>
                 <h3>{money.format(result.targetRequiredBalance)}</h3>
@@ -388,14 +457,14 @@ export function QuoteTool() {
                 </div>
               </section>
 
-              <div className="formula-note"><b>Calculation basis</b><p>STC, GST, cost and margin relationships match the original workbook. The target balance is solved live and no longer relies on an Excel macro.</p></div>
+              <div className="formula-note"><b>Calculation basis</b><p>STCs, Solar VIC Rebate, Interest Free Loan and Discount are deducted consistently from totals and margin calculations. The target balance is solved live and no longer relies on an Excel macro.</p></div>
             </aside>
           </div>
         )}
 
         {tab === "history" && (
           <section className="panel standalone">
-            <div className="section-heading"><div><span>◷</span><h2>Recent quotes</h2></div><small>Only your own records are shown</small></div>
+            <div className="section-heading"><div><span>◷</span><h2>Shared quotes</h2></div><small>Everyone can view and edit · admins can delete</small></div>
             {session.quotes.length === 0 ? <EmptyState /> : (
               <>
                 <label className="history-search">
@@ -408,10 +477,10 @@ export function QuoteTool() {
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
-                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, customItems: quote.payload.customItems ?? [] }); setTab("quote"); };
+                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, discount: Math.abs(quote.payload.discount ?? 0), customItems: quote.payload.customItems ?? [] }); setTab("quote"); };
                     return <div className="history-row" key={quote.id}>
                       <button className="history-main" onClick={openQuote}>
-                        <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"}</small></span>
+                        <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Created by {quote.ownerName}</small></span>
                         <span className="history-config">
                           <span><em>Solar</em><b>{quote.payload.pvSize || "-"} kW</b></span>
                           <span><em>Battery</em><b>{quote.payload.batteryKwh || "-"} kWh</b></span>
@@ -420,13 +489,16 @@ export function QuoteTool() {
                         <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
                         <span className="chevron">›</span>
                       </button>
-                      <label className="history-status">
-                        <span className="sr-only">Quote status</span>
-                        <select className={quote.status} value={quote.status} disabled={statusBusyId === quote.id} onChange={(event) => void changeQuoteStatus(quote.id, event.target.value as QuoteStatus)}>
-                          <option value="drafting">Drafting</option>
-                          <option value="done">Done</option>
-                        </select>
-                      </label>
+                      <div className="history-actions">
+                        <label className="history-status">
+                          <span className="sr-only">Quote status</span>
+                          <select className={quote.status} value={quote.status} disabled={statusBusyId === quote.id} onChange={(event) => void changeQuoteStatus(quote.id, event.target.value as QuoteStatus)}>
+                            <option value="drafting">Drafting</option>
+                            <option value="done">Done</option>
+                          </select>
+                        </label>
+                        {isAdmin && <button type="button" className="delete-quote-btn" disabled={statusBusyId === quote.id} onClick={() => void removeQuote(quote.id, quote.projectName)}>Delete</button>}
+                      </div>
                     </div>;
                   })}</div>
                 )}
@@ -440,35 +512,58 @@ export function QuoteTool() {
         )}
 
         {tab === "users" && isAdmin && (
-          <UsersPanel viewer={session.viewer} users={session.users} onChanged={async () => { await loadSession(); flash("Access updated"); }} />
+          <UsersPanel viewer={session.viewer} users={session.users} />
         )}
       </main>
 
-      {adminDialogOpen && (
-        <div className="dialog-backdrop" role="presentation" onMouseDown={() => !adminBusy && setAdminDialogOpen(false)}>
-          <section className="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="admin-dialog-icon">E3</div>
-            <div>
-              <h2 id="admin-dialog-title">Administrator access</h2>
-              <p>Enter the administrator password to manage base data and user access.</p>
-            </div>
-            <form onSubmit={requestAdminAccess}>
-              <label className="field">
-                <span>Administrator password</span>
-                <input autoFocus type="password" autoComplete="current-password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
-              </label>
-              {adminError && <p className="admin-dialog-error" role="alert">{adminError}</p>}
-              <div className="admin-dialog-actions">
-                <button type="button" className="ghost-btn" disabled={adminBusy} onClick={() => { setAdminDialogOpen(false); setAdminPassword(""); }}>Cancel</button>
-                <button type="submit" className="primary-btn" disabled={adminBusy || adminPassword.length === 0}>{adminBusy ? "Checking…" : "Continue as administrator"}</button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
-
       {message && <div className="toast">{message}</div>}
     </div>
+  );
+}
+
+function LoginScreen({
+  username,
+  password,
+  busy,
+  error,
+  onUsernameChange,
+  onPasswordChange,
+  onSubmit,
+}: {
+  username: string;
+  password: string;
+  busy: boolean;
+  error: string;
+  onUsernameChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <main className="login-screen">
+      <section className="login-card" aria-labelledby="login-title">
+        <div className="login-brand"><span className="brand-logo-badge large" role="img" aria-label="E3 Energy" /><div><b>E3 Quoter</b><small>Quote and margin workspace</small></div></div>
+        <div className="login-copy">
+          <span>SECURE ACCESS</span>
+          <h1 id="login-title">Sign in to continue</h1>
+          <p>Use your assigned E3 Quoter account.</p>
+        </div>
+        <form onSubmit={onSubmit}>
+          <label className="field">
+            <span>Username</span>
+            <input autoFocus autoComplete="username" value={username} onChange={(event) => onUsernameChange(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input type="password" autoComplete="current-password" value={password} onChange={(event) => onPasswordChange(event.target.value)} />
+          </label>
+          {error && <p className="login-error" role="alert">{error}</p>}
+          <button className="primary-btn login-submit" type="submit" disabled={busy || !username.trim() || !password}>
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+        <small className="login-help">Contact an administrator if you cannot access your account.</small>
+      </section>
+    </main>
   );
 }
 
@@ -539,8 +634,8 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
         <Field label="Battery STC unit price"><NumberInput value={settings.batteryStcUnitPrice} prefix="$" onChange={(v) => update({ batteryStcUnitPrice: v })} /></Field>
         <Field label="Battery installation cost"><NumberInput value={settings.batteryInstallCost} prefix="$" onChange={(v) => update({ batteryInstallCost: v })} /></Field>
         <Field label="Delivery cost"><NumberInput value={settings.deliveryCost} prefix="$" onChange={(v) => update({ deliveryCost: v })} /></Field>
-        <Field label="Accessories cost / kW"><NumberInput value={settings.accessoryCostPerKw} prefix="$" onChange={(v) => update({ accessoryCostPerKw: v })} /></Field>
-        <Field label="Solar installation cost / W"><NumberInput value={settings.solarInstallCostPerWatt} prefix="$" onChange={(v) => update({ solarInstallCostPerWatt: v })} /></Field>
+        <Field label="Accessories unit cost"><NumberInput value={settings.accessoryCostPerKw} prefix="$" suffix="/ PV system kW" onChange={(v) => update({ accessoryCostPerKw: Math.max(0, v) })} /></Field>
+        <Field label="Solar installation unit cost"><NumberInput value={settings.solarInstallCostPerKw} prefix="$" suffix="/ PV system kW" onChange={(v) => update({ solarInstallCostPerKw: Math.max(0, v) })} /></Field>
       </div>
     </section>
     <div className="catalog-split">
@@ -556,19 +651,10 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
   </div>;
 }
 
-function UsersPanel({ viewer, users, onChanged }: { viewer: Viewer; users: UserRow[]; onChanged: () => Promise<void> }) {
-  const [busyId, setBusyId] = useState("");
-  const changeRole = async (userId: string, role: Role) => {
-    setBusyId(userId);
-    try {
-      const response = await fetch("/api/users", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId, role }) });
-      if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "Unable to update access");
-      await onChanged();
-    } finally { setBusyId(""); }
-  };
+function UsersPanel({ viewer, users }: { viewer: Viewer; users: UserRow[] }) {
   return <section className="panel standalone">
-    <div className="section-heading"><div><span>U</span><h2>User access</h2></div><small>The first signed-in user becomes an administrator</small></div>
-    <div className="user-list">{users.map((user) => <div key={user.userId} className="user-row"><div className="avatar">{user.displayName.slice(0, 1).toUpperCase()}</div><div className="user-info"><b>{user.displayName}{user.userId === viewer.userId && <em>You</em>}</b><small>{user.email}</small></div><select disabled={busyId === user.userId || user.userId === viewer.userId} value={user.role} onChange={(e) => changeRole(user.userId, e.target.value as Role)}><option value="user">Standard user</option><option value="admin">Administrator</option></select></div>)}</div>
+    <div className="section-heading"><div><span>U</span><h2>User access</h2></div><small>Account roles are fixed</small></div>
+    <div className="user-list">{users.map((user) => <div key={user.userId} className="user-row"><div className="avatar">{user.displayName.slice(0, 1).toUpperCase()}</div><div className="user-info"><b>{user.displayName}{user.userId === viewer.userId && <em>You</em>}</b><small>{user.email}</small></div><span className={`role-badge ${user.role}`}>{user.role === "admin" ? "Administrator" : "Standard user"}</span></div>)}</div>
     <div className="permission-note"><b>Access rules</b><p>Standard users can edit customer and project details, rebates, discounts and site-specific costs. Only administrators can change equipment catalogues, base costs, STC prices and margin thresholds.</p></div>
   </section>;
 }

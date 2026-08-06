@@ -24,7 +24,11 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(origin),
     title,
     description,
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+    icons: {
+      icon: [{ url: "/brand/e3-energy-mark.png", type: "image/png" }],
+      shortcut: "/brand/e3-energy-mark.png",
+      apple: "/brand/e3-energy-mark.png",
+    },
     openGraph: { title, description, images: [{ url: `${origin}/og-e3-quoter.png`, width: 1200, height: 630 }] },
     twitter: { card: "summary_large_image", title, description, images: [`${origin}/og-e3-quoter.png`] },
   };
