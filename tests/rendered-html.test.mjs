@@ -147,6 +147,72 @@ test("adds VIC funding and deducts discount from total received and margins", as
   assert.equal(funded.totalReceivedExGst, 275);
 });
 
+test("supports per-quote C&I margins and manual STC funding", async () => {
+  const { calculateQuote } = await loadTypeScriptModule("lib/calculate.ts");
+  const settings = {
+    thresholds: { approval: 0.1, target: 0.2 },
+    gstRate: 0.1,
+    solarStcUnitPrice: 10,
+    batteryStcUnitPrice: 20,
+    stcScaleFactor: 1,
+    stcYears: 1,
+    panelBatchWatts: 1000,
+    panelBatchCost: 100,
+    accessoryCostPerKw: 0,
+    solarInstallCostPerKw: 0,
+    batteryInstallCost: 0,
+    deliveryCost: 0,
+    blinkFee: 0,
+    margins: { solarPanel: 0.2 },
+    inverters: [],
+    batteries: [{ name: "Test battery", kwh: 1, certificates: 5, cost: 0 }],
+  };
+  const inputs = {
+    ...defaultQuoteForPvSizeTest(),
+    mode: "ci",
+    pvSize: 1,
+    batteryKwh: 1,
+    customerBalance: 110,
+    manualSolarStc: 300,
+    manualBatteryStc: 400,
+    manualMargins: { solarPanel: 0.5, inverter: 0.4 },
+  };
+
+  const ci = calculateQuote(inputs, settings);
+  const residential = calculateQuote({ ...inputs, mode: "residential" }, settings);
+  const ciSolarPanel = ci.lineItems.find((item) => item.key === "solarPanel");
+  const residentialSolarPanel = residential.lineItems.find((item) => item.key === "solarPanel");
+
+  assert.equal(ci.solarStc, 300);
+  assert.equal(ci.batteryStc, 400);
+  assert.equal(ciSolarPanel.margin, 0.5);
+  assert.equal(ciSolarPanel.salesPrice, 150);
+  assert.equal(residential.solarStc, 10);
+  assert.equal(residential.batteryStc, 100);
+  assert.equal(residentialSolarPanel.margin, 0.2);
+  assert.equal(residentialSolarPanel.salesPrice, 120);
+
+  const [quoteTool, model, defaults] = await Promise.all([
+    readFile(new URL("app/QuoteTool.tsx", root), "utf8"),
+    readFile(new URL("lib/model.ts", root), "utf8"),
+    readFile(new URL("lib/defaults.ts", root), "utf8"),
+  ]);
+  assert.match(model, /QuoteMode = "residential" \| "ci"/);
+  assert.match(defaults, /mode: "residential"/);
+  assert.match(quoteTool, /aria-label="Quote mode"/);
+  assert.match(quoteTool, /setManualMargin\(item\.key/);
+  assert.match(quoteTool, /manualSolarStc/);
+  assert.match(quoteTool, /manualBatteryStc/);
+  assert.match(quoteTool, /!isCiMode && <div className="quick-margin-buttons funding-quick-margins">/);
+  assert.match(quoteTool, /quote\.payload\.mode === "ci"/);
+  assert.match(quoteTool, /className="ci-badge"/);
+  assert.doesNotMatch(quoteTool, /quote-total-chips/);
+  assert.doesNotMatch(quoteTool, />Total cost</);
+  assert.doesNotMatch(quoteTool, />Total sales price</);
+  assert.doesNotMatch(quoteTool, /className="target-card"/);
+  assert.doesNotMatch(quoteTool, />Shortfall</);
+});
+
 test("uses editable per-kW base rates without exposing formulas in the calculator", async () => {
   const { defaultSettings, normalizeSettings } = await loadTypeScriptModule("lib/defaults.ts");
   const { updatePvSize } = await loadTypeScriptModule("lib/quote-inputs.ts");

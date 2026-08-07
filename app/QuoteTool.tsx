@@ -29,7 +29,9 @@ const today = () => {
 const freshQuote = (): QuoteInputs => ({
   ...defaultQuote,
   date: today(),
+  customItems: [...(defaultQuote.customItems ?? [])],
   manualCosts: { ...defaultQuote.manualCosts },
+  manualMargins: { ...(defaultQuote.manualMargins ?? {}) },
 });
 
 export function QuoteTool() {
@@ -107,6 +109,9 @@ export function QuoteTool() {
   };
   const setManualCost = (key: keyof QuoteInputs["manualCosts"], value: number) => {
     setInputs((current) => ({ ...current, manualCosts: { ...current.manualCosts, [key]: value } }));
+  };
+  const setManualMargin = (key: string, value: number) => {
+    setInputs((current) => ({ ...current, manualMargins: { ...(current.manualMargins ?? {}), [key]: value } }));
   };
   const setPvSize = (value: number) => {
     setInputs((current) => updatePvSize(current, value));
@@ -298,6 +303,7 @@ export function QuoteTool() {
     { id: "users", label: "User access", glyph: "◎", admin: true },
   ];
   const notifications = session.notifications ?? [];
+  const isCiMode = inputs.mode === "ci";
 
   return (
     <div className="app-shell">
@@ -338,6 +344,10 @@ export function QuoteTool() {
             <h1>{tab === "quote" ? "Quote Table" : tab === "history" ? "Team quotes" : tab === "settings" ? "Base data management" : "Users & access"}</h1>
           </div>
           <div className="top-actions">
+            {tab === "quote" && <div className="mode-switch" role="group" aria-label="Quote mode">
+              <button type="button" className={!isCiMode ? "active" : ""} aria-pressed={!isCiMode} onClick={() => setField("mode", "residential")}>Residential</button>
+              <button type="button" className={isCiMode ? "active" : ""} aria-pressed={isCiMode} onClick={() => setField("mode", "ci")}>C&amp;I</button>
+            </div>}
             <button className="ghost-btn mobile-hide" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
             <button className="ghost-btn" disabled={busy} onClick={() => void signOut()}>Sign out</button>
             {tab === "quote" && <button className="primary-btn" disabled={busy} onClick={saveQuote}>{busy ? "Saving…" : "Save quote"}</button>}
@@ -390,7 +400,7 @@ export function QuoteTool() {
                               <tr key={item.key}>
                                 <td>{isCustom ? <input className="custom-item-name" value={item.customItemName ?? ""} placeholder="Item name" aria-label="Custom item name" onChange={(event) => updateCustomItem(item.customItemId!, { name: event.target.value })} /> : <><b>{item.label}</b>{item.note && <small>{item.note}</small>}</>}</td>
                                 <td>{isCustom ? <NumberInput compact value={item.cost} prefix="$" onChange={(v) => updateCustomItem(item.customItemId!, { cost: Math.max(0, v) })} /> : item.editableByUser ? <NumberInput compact value={item.cost} prefix="$" onChange={(v) => setManualCost(manualKey, v)} /> : <span className="locked-value">{money.format(item.cost)}</span>}</td>
-                                <td>{isCustom ? <NumberInput compact value={item.margin * 100} suffix="%" onChange={(v) => updateCustomItem(item.customItemId!, { margin: percentageRate(Math.max(0, v)) })} /> : <span className="margin-chip">{pct(item.margin)}</span>}</td>
+                                <td>{isCustom ? <NumberInput compact value={item.margin * 100} suffix="%" onChange={(v) => updateCustomItem(item.customItemId!, { margin: percentageRate(Math.max(0, v)) })} /> : isCiMode ? <NumberInput compact value={item.margin * 100} suffix="%" onChange={(v) => setManualMargin(item.key, percentageRate(Math.max(0, v)))} /> : <span className="margin-chip">{pct(item.margin)}</span>}</td>
                                 <td><div className="sales-cell"><b>{money.format(item.salesPrice)}</b>{isCustom && <button type="button" className="remove-item-btn" aria-label={`Remove ${item.label}`} onClick={() => removeCustomItem(item.customItemId!)}>×</button>}</div></td>
                               </tr>
                             );
@@ -400,26 +410,20 @@ export function QuoteTool() {
                     </div>
                   </div>
                   <div className="funding-panel">
-                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>Enter deductions as positive amounts</small></div>
+                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>{isCiMode ? "C&I: STCs and margins are editable" : "Enter deductions as positive amounts"}</small></div>
                     <div className="funding-grid">
-                      <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />
-                      <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />
+                      {isCiMode ? <ManualStcField label="Solar STC" value={result.solarStc} detail={`${result.solarCertificates} calculated certificates`} onChange={(v) => setField("manualSolarStc", Math.max(0, v))} /> : <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />}
+                      {isCiMode ? <ManualStcField label="Battery STC" value={result.batteryStc} detail={`${result.batteryCertificates} calculated certificates`} onChange={(v) => setField("manualBatteryStc", Math.max(0, v))} /> : <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />}
                       <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
                       <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
-                      <div className="funding-final-column totals-control">
+                      <div className="funding-final-row">
                         <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.max(0, v))} /></Field>
-                        <div className="quote-total-chips">
-                          <div><span>Total cost</span><b>{money.format(result.lineItemCostTotal)}</b><small>After all deductions</small></div>
-                          <div><span>Total sales price</span><b>{money.format(result.lineItemSalesTotal)}</b><small>After all deductions</small></div>
-                        </div>
-                      </div>
-                      <div className="balance-control">
                         <Field label="Customer balance (incl. GST)"><NumberInput prefix="$" value={inputs.customerBalance} onChange={(v) => setField("customerBalance", v)} /></Field>
-                        <div className="quick-margin-buttons">
-                          <button type="button" onClick={() => applyMarginBalance(result.margin20RequiredBalance)}><b>20% Margin</b><span>{money.format(result.margin20RequiredBalance)}</span></button>
-                          <button type="button" onClick={() => applyMarginBalance(result.margin15RequiredBalance)}><b>15% Margin</b><span>{money.format(result.margin15RequiredBalance)}</span></button>
-                        </div>
                       </div>
+                      {!isCiMode && <div className="quick-margin-buttons funding-quick-margins">
+                        <button type="button" onClick={() => applyMarginBalance(result.margin20RequiredBalance)}><b>20% Margin</b><span>{money.format(result.margin20RequiredBalance)}</span></button>
+                        <button type="button" onClick={() => applyMarginBalance(result.margin15RequiredBalance)}><b>15% Margin</b><span>{money.format(result.margin15RequiredBalance)}</span></button>
+                      </div>}
                     </div>
                   </div>
                 </div>
@@ -448,16 +452,7 @@ export function QuoteTool() {
                 <b>{money.format(inputs.customerBalance)}</b>
               </section>
 
-              <section className="target-card">
-                <span className="target-kicker">Reach {pct(settings.thresholds.target)} margin</span>
-                <h3>{money.format(result.targetRequiredBalance)}</h3>
-                <p>Required customer balance (incl. GST)</p>
-                <div className={result.targetGap > 0 ? "gap bad" : "gap good"}>
-                  <span>{result.targetGap > 0 ? "Shortfall" : "Above target"}</span><b>{money.format(Math.abs(result.targetGap))}</b>
-                </div>
-              </section>
-
-              <div className="formula-note"><b>Calculation basis</b><p>Total received includes the customer balance, both STCs, Solar VIC Rebate and Interest Free Loan, less Discount. The target balance is solved live and no longer relies on an Excel macro.</p></div>
+              <div className="formula-note"><b>Calculation basis</b><p>Total received includes the customer balance, both STCs, Solar VIC Rebate and Interest Free Loan, less Discount.</p></div>
             </aside>
           </div>
         )}
@@ -477,10 +472,10 @@ export function QuoteTool() {
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
-                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, discount: Math.abs(quote.payload.discount ?? 0), customItems: quote.payload.customItems ?? [] }); setTab("quote"); };
+                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, mode: quote.payload.mode ?? "residential", discount: Math.abs(quote.payload.discount ?? 0), customItems: quote.payload.customItems ?? [], manualMargins: quote.payload.manualMargins ?? {} }); setTab("quote"); };
                     return <div className="history-row" key={quote.id}>
                       <button className="history-main" onClick={openQuote}>
-                        <span className="history-customer"><b>{quote.projectName}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Created by {quote.ownerName}</small></span>
+                        <span className="history-customer"><b>{quote.projectName}{quote.payload.mode === "ci" && <em className="ci-badge">C&amp;I</em>}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Created by {quote.ownerName}</small></span>
                         <span className="history-config">
                           <span><em>Solar</em><b>{quote.payload.pvSize || "-"} kW</b></span>
                           <span><em>Battery</em><b>{quote.payload.batteryKwh || "-"} kWh</b></span>
@@ -612,6 +607,10 @@ function NumberInput({ value, onChange, prefix, suffix, compact }: { value: numb
 
 function Readout({ label, value, detail }: { label: string; value: string; detail: string }) {
   return <div className="readout"><span>{label}</span><b>{value}</b><small>{detail}</small></div>;
+}
+
+function ManualStcField({ label, value, detail, onChange }: { label: string; value: number; detail: string; onChange: (value: number) => void }) {
+  return <div className="manual-stc-field"><Field label={label}><NumberInput prefix="$" value={value} onChange={onChange} /></Field><small>{detail} · manual amount</small></div>;
 }
 
 function Metric({ label, value, accent, muted }: { label: string; value: string; accent?: boolean; muted?: boolean }) {
