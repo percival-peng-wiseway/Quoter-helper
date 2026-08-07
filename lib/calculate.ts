@@ -47,15 +47,25 @@ export function calculateQuote(
     ["externalCommission", "External Commission incl. GST", true],
   ];
 
-  const standardLineItems: LineItemResult[] = definitions.map(([key, label, editableByUser, note]) => ({
-    key,
-    label,
-    cost: costs[key],
-    margin: settings.margins[key] ?? 0,
-    salesPrice: costs[key] * (1 + (settings.margins[key] ?? 0)),
-    editableByUser,
-    note,
-  }));
+  const isCiMode = inputs.mode === "ci";
+  const marginFor = (key: keyof typeof costs) => {
+    const override = isCiMode ? inputs.manualMargins?.[key] : undefined;
+    return typeof override === "number" && Number.isFinite(override)
+      ? Math.max(0, override)
+      : Math.max(0, settings.margins[key] ?? 0);
+  };
+  const standardLineItems: LineItemResult[] = definitions.map(([key, label, editableByUser, note]) => {
+    const margin = marginFor(key);
+    return {
+      key,
+      label,
+      cost: costs[key],
+      margin,
+      salesPrice: costs[key] * (1 + margin),
+      editableByUser,
+      note,
+    };
+  });
   const customLineItems: LineItemResult[] = (inputs.customItems ?? []).map((item) => {
     const cost = Math.max(0, finite(item.cost));
     const margin = Math.max(0, finite(item.margin));
@@ -75,9 +85,14 @@ export function calculateQuote(
   const commission = lineItems.find((item) => item.key === "externalCommission")!;
   const normalItems = lineItems.filter((item) => item.key !== "externalCommission");
   const solarCertificates = Math.floor(pvSize * settings.stcScaleFactor * settings.stcYears);
-  const solarStc = solarCertificates * settings.solarStcUnitPrice;
+  const calculatedSolarStc = solarCertificates * settings.solarStcUnitPrice;
   const batteryCertificates = battery?.certificates ?? 0;
-  const batteryStc = batteryCertificates * settings.batteryStcUnitPrice;
+  const calculatedBatteryStc = batteryCertificates * settings.batteryStcUnitPrice;
+  const manualStc = (value: number | undefined, fallback: number) => isCiMode && typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : fallback;
+  const solarStc = manualStc(inputs.manualSolarStc, calculatedSolarStc);
+  const batteryStc = manualStc(inputs.manualBatteryStc, calculatedBatteryStc);
   const solarVicRebate = Math.max(0, finite(inputs.solarVicRebate));
   const solarVicLoan = Math.max(0, finite(inputs.solarVicLoan));
   // Older saved quotes used negative discounts. Treat either sign as a deduction.

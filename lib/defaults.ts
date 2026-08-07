@@ -78,6 +78,7 @@ export function normalizeSettings(input: AppSettings | LegacyAppSettings): AppSe
 }
 
 export const defaultQuote: QuoteInputs = {
+  mode: "residential",
   date: "",
   customerName: "",
   phone: "",
@@ -90,6 +91,7 @@ export const defaultQuote: QuoteInputs = {
   solarVicRebate: 0,
   solarVicLoan: 0,
   discount: 0,
+  manualMargins: {},
   customItems: [],
   manualCosts: {
     backup: 0,

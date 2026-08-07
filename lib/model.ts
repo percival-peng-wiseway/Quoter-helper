@@ -1,5 +1,6 @@
 export type Role = "admin" | "user";
 export type QuoteStatus = "drafting" | "done";
+export type QuoteMode = "residential" | "ci";
 
 export type CatalogItem = {
   name: string;
@@ -31,6 +32,7 @@ export type AppSettings = {
 };
 
 export type QuoteInputs = {
+  mode?: QuoteMode;
   date: string;
   customerName: string;
   phone: string;
@@ -43,6 +45,9 @@ export type QuoteInputs = {
   solarVicRebate: number;
   solarVicLoan: number;
   discount: number;
+  manualSolarStc?: number;
+  manualBatteryStc?: number;
+  manualMargins?: Record<string, number>;
   customItems?: Array<{
     id: string;
     name: string;
