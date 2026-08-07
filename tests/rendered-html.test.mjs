@@ -282,6 +282,8 @@ test("aggregates multiple C&I PV systems, inverter models and battery models", a
   assert.match(quoteTool, /Add inverter/);
   assert.match(quoteTool, /Add battery/);
   assert.match(quoteTool, /label="Quantity"/);
+  assert.match(quoteTool, /batteryModelLabel\(option\.name\)/);
+  assert.match(quoteTool, /replace\(\/\^\\s\*\\d\+\\s\*\[×x\]\\s\*\/i, ""\)/);
   assert.match(quoteTool, /calculated\.totalPvSize/);
   assert.match(quoteTool, /calculated\.inverterSummary/);
   assert.match(transfer, /raw\.ciPvSystems/);

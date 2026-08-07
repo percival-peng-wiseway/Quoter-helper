@@ -15,6 +15,7 @@ const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
 const num = (value: string) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const inputNumber = (value: number) => value === 0 ? "" : String(Math.round((value + Number.EPSILON) * 100_000_000) / 100_000_000);
 const percentageRate = (value: number) => Math.round((value / 100) * 1_000_000) / 1_000_000;
+const batteryModelLabel = (name: string) => name.replace(/^\s*\d+\s*[×x]\s*/i, "");
 const notificationTime = (value: string) => {
   const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const date = new Date(normalized);
@@ -532,7 +533,7 @@ export function QuoteTool() {
                       </CiConfigGroup>
                       <CiConfigGroup label="Batteries" total={`${result.totalBatteryKwh} kWh`} addLabel="Add battery" onAdd={addCiBattery}>
                         {(inputs.ciBatteries ?? []).map((item) => <div className="ci-config-row" key={item.id}>
-                          <Field label="Model"><select value={item.kwh} onChange={(event) => updateCiBattery(item.id, { kwh: num(event.target.value) })}>{settings.batteries.map((option) => <option key={option.kwh} value={option.kwh}>{option.name}</option>)}</select></Field>
+                          <Field label="Model"><select value={item.kwh} onChange={(event) => updateCiBattery(item.id, { kwh: num(event.target.value) })}>{settings.batteries.map((option) => <option key={option.kwh} value={option.kwh}>{batteryModelLabel(option.name)}</option>)}</select></Field>
                           <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => updateCiBattery(item.id, { quantity: value })} /></Field>
                           <RemoveCiButton label="battery" disabled={(inputs.ciBatteries?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciBatteries", item.id)} />
                         </div>)}
