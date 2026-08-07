@@ -248,6 +248,159 @@ test("uses editable per-kW base rates without exposing formulas in the calculato
   assert.match(quoteTool, /Customer balance <small>\(incl\. GST\)<\/small>/);
 });
 
+test("imports XLSM and exports XLSX with imported records defaulting to done", async () => {
+  const [quoteTool, importRoute, store, transfer, excel] = await Promise.all([
+    readFile(new URL("app/QuoteTool.tsx", root), "utf8"),
+    readFile(new URL("app/api/quotes/import/route.ts", root), "utf8"),
+    readFile(new URL("lib/server/store.ts", root), "utf8"),
+    readFile(new URL("lib/quote-transfer.ts", root), "utf8"),
+    readFile(new URL("lib/quote-excel.ts", root), "utf8"),
+  ]);
+
+  assert.match(quoteTool, /createQuotesWorkbook\(quotes, settings\)/);
+  assert.match(quoteTool, /\.xlsx,\.xlsm/);
+  assert.match(quoteTool, /e3-quotes-\$\{today\(\)\}\.xlsx/);
+  assert.match(quoteTool, /parseQuotesWorkbook\(await file\.arrayBuffer\(\)\)/);
+  assert.match(quoteTool, /fetch\("\/api\/quotes\/import"/);
+  assert.match(quoteTool, /quotes imported as Done/);
+  assert.match(quoteTool, /↓ Import/);
+  assert.match(quoteTool, /↑ Export all/);
+  assert.match(quoteTool, /exportSingleQuote\(quote\)/);
+  assert.match(quoteTool, /e3-\$\{safeExportName\(projectName\)\}-\$\{today\(\)\}\.xlsx/);
+  assert.match(importRoute, /extractImportedQuotePayloads\(body\)/);
+  assert.match(importRoute, /status: "done"/);
+  assert.match(store, /export async function importQuotes/);
+  assert.match(store, /VALUES \(\?, \?, \?, 'done', \?\)/);
+  assert.match(transfer, /MAX_IMPORT_QUOTES = 500/);
+  assert.match(excel, /bookType: "xlsx"/);
+  assert.match(excel, /bookVBA: false/);
+  assert.match(excel, /E3 Payload JSON/);
+});
+
+test("exports project breakdown sheets, round-trips XLSX and reads an XLSM quote sheet", async () => {
+  const [{ createQuotesWorkbook, parseQuotesWorkbook }, XLSX, { defaultSettings }] = await Promise.all([
+    import(new URL("lib/quote-excel.ts", root)),
+    import("xlsx"),
+    import(new URL("lib/defaults.ts", root)),
+  ]);
+  const payload = {
+    ...defaultQuoteForPvSizeTest(),
+    mode: "ci",
+    date: "2026-08-07",
+    customerName: "Excel Round Trip",
+    pvSize: 12.5,
+    customerBalance: 9000,
+    manualMargins: { solarPanel: 0.18 },
+  };
+  const bytes = createQuotesWorkbook([{
+    id: "quote-1",
+    projectName: payload.customerName,
+    ownerName: "Sam",
+    status: "drafting",
+    payload,
+    createdAt: "2026-08-07T00:00:00.000Z",
+    updatedAt: "2026-08-07T00:00:00.000Z",
+  }], defaultSettings);
+  assert.ok(bytes.byteLength > 1_000);
+  const exportedWorkbook = XLSX.read(bytes, { type: "array", cellFormula: true });
+  assert.deepEqual(exportedWorkbook.SheetNames.slice(0, 2), ["Summary", "01 Excel Round Trip"]);
+  assert.ok(exportedWorkbook.SheetNames.includes("Quotes"));
+  assert.ok(exportedWorkbook.SheetNames.includes("Instructions"));
+  assert.equal(exportedWorkbook.Workbook.Sheets.find((sheet) => sheet.name === "Quotes").Hidden, 1);
+  assert.equal(exportedWorkbook.Sheets.Summary.A1.v, "E3 Quote Portfolio Summary");
+  assert.equal(exportedWorkbook.Sheets.Summary.L6.f, "'01 Excel Round Trip'!E36");
+  assert.equal(exportedWorkbook.Sheets["01 Excel Round Trip"].A11.v, "Quote Breakdown");
+  assert.equal(exportedWorkbook.Sheets["01 Excel Round Trip"].D13.f, "B13*(1+C13)");
+  assert.equal(exportedWorkbook.Sheets["01 Excel Round Trip"].D29.v, "Margin Summary");
+  const [roundTrip] = parseQuotesWorkbook(bytes);
+  assert.equal(roundTrip.customerName, "Excel Round Trip");
+  assert.equal(roundTrip.mode, "ci");
+  assert.equal(roundTrip.pvSize, 12.5);
+  assert.deepEqual(roundTrip.manualMargins, { solarPanel: 0.18 });
+
+  const xlsmWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(xlsmWorkbook, XLSX.utils.json_to_sheet([{
+    "Customer Name": "Macro Workbook Quote",
+    "Mode": "C&I",
+    "PV System Size (kW)": 25,
+    "Customer Balance (incl. GST)": 15_000,
+  }]), "Imported Quotes");
+  const xlsmBytes = XLSX.write(xlsmWorkbook, { type: "array", bookType: "xlsm" });
+  const [xlsmQuote] = parseQuotesWorkbook(new Uint8Array(xlsmBytes));
+  assert.equal(xlsmQuote.customerName, "Macro Workbook Quote");
+  assert.equal(xlsmQuote.mode, "ci");
+  assert.equal(xlsmQuote.pvSize, 25);
+  assert.equal(xlsmQuote.customerBalance, 15_000);
+
+  const templateRows = Array.from({ length: 77 }, () => Array(8).fill(""));
+  const setTemplateCell = (address, value) => {
+    const { r, c } = XLSX.utils.decode_cell(address);
+    templateRows[r][c] = value;
+  };
+  [
+    ["B10", "Project Info"], ["B28", "Quote"], ["C12", "Date"], ["D12", "25-May-2026"],
+    ["C14", "Name"], ["D14", "Fox Template Customer"], ["C16", "Address"],
+    ["C18", "PV Size"], ["D18", 6.6], ["C20", "Battery Size"], ["D20", 20.88],
+    ["C22", "Inverter"], ["D22", "KH8 Single Phase Hybrid inverter 8KW"],
+    ["C24", "E³ Energy Initiator"], ["D24", "Hogan"], ["F38", 120], ["F40", 627],
+    ["F42", 1980], ["F44", 1800], ["F46", 200], ["F48", 80], ["F50", 300],
+    ["F52", 400], ["F54", 0], ["F56", 250], ["D59", 1599], ["D65", 5043],
+    ["D71", 1400], ["D73", 1400], ["D75", -200], ["D77", 8000],
+    ["H32", 0.1], ["H34", 0.25], ["H36", 0.25], ["H38", 0.3], ["H40", 0.25],
+    ["H42", 0.05], ["H44", 0.05], ["H46", 0.25], ["H48", 0.25], ["H50", 0],
+    ["H52", 0.25], ["H54", 0.25], ["H56", 0.25],
+  ].forEach(([address, value]) => setTemplateCell(address, value));
+  const templateWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(templateWorkbook, XLSX.utils.aoa_to_sheet(templateRows), "GM check");
+  const templateBytes = XLSX.write(templateWorkbook, { type: "array", bookType: "xlsm" });
+  const [templateQuote] = parseQuotesWorkbook(new Uint8Array(templateBytes));
+  assert.deepEqual(templateQuote, {
+    customerName: "Fox Template Customer",
+    date: "2026-05-25",
+    mode: "residential",
+    phone: "",
+    address: "",
+    initiator: "Hogan",
+    pvSize: 6.6,
+    batteryKwh: 20.88,
+    inverter: "KH8 Single Phase Hybrid inverter 8KW",
+    customerBalance: 8000,
+    solarVicRebate: 1400,
+    solarVicLoan: 1400,
+    discount: 200,
+    manualSolarStc: 1599,
+    manualBatteryStc: 5043,
+    manualCosts: {
+      backup: 120,
+      accessories: 627,
+      solarInstallation: 1980,
+      batteryInstallation: 1800,
+      delivery: 200,
+      acCable: 80,
+      blinkFee: 300,
+      switchboard: 400,
+      subSwitchboard: 0,
+      externalCommission: 250,
+    },
+    manualMargins: {
+      solarPanel: 0.1,
+      inverter: 0.25,
+      battery: 0.25,
+      backup: 0.3,
+      accessories: 0.25,
+      solarInstallation: 0.05,
+      batteryInstallation: 0.05,
+      delivery: 0.25,
+      acCable: 0.25,
+      blinkFee: 0,
+      switchboard: 0.25,
+      subSwitchboard: 0.25,
+      externalCommission: 0.25,
+    },
+    customItems: [],
+  });
+});
+
 function defaultQuoteForPvSizeTest() {
   return {
     date: "2026-08-06",

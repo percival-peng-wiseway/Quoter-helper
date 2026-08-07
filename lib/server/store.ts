@@ -208,6 +208,17 @@ export async function saveQuote(viewer: Viewer, id: string | null, payload: Quot
   return quoteId;
 }
 
+export async function importQuotes(viewer: Viewer, payloads: QuoteInputs[]): Promise<number> {
+  const db = getRawDb();
+  for (let start = 0; start < payloads.length; start += 50) {
+    const batch = payloads.slice(start, start + 50).map((payload) => db.prepare(`INSERT INTO quotes
+      (id, owner_id, project_name, status, payload) VALUES (?, ?, ?, 'done', ?)`)
+      .bind(crypto.randomUUID(), viewer.userId, payload.customerName.trim(), JSON.stringify(payload)));
+    await db.batch(batch);
+  }
+  return payloads.length;
+}
+
 export async function updateQuoteStatus(_viewer: Viewer, id: string, status: QuoteStatus) {
   const existing = await getRawDb().prepare("SELECT id FROM quotes WHERE id = ?")
     .bind(id)

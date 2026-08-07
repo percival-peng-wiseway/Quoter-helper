@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
 import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
@@ -26,6 +26,12 @@ const today = () => {
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
 };
+const safeExportName = (value: string) => value
+  .trim()
+  .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
+  .replace(/\s+/g, "-")
+  .replace(/-+/g, "-")
+  .slice(0, 80) || "quote";
 const freshQuote = (): QuoteInputs => ({
   ...defaultQuote,
   date: today(),
@@ -42,6 +48,7 @@ export function QuoteTool() {
   const [tab, setTab] = useState<Tab>("quote");
   const [quoteSearch, setQuoteSearch] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
+  const [quoteTransferBusy, setQuoteTransferBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [loginRequired, setLoginRequired] = useState(false);
@@ -49,6 +56,7 @@ export function QuoteTool() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const quoteImportRef = useRef<HTMLInputElement>(null);
 
   const fetchSession = async () => {
     const response = await fetch("/api/session", { cache: "no-store" });
@@ -244,6 +252,64 @@ export function QuoteTool() {
       flash(error instanceof Error ? error.message : "Unable to delete quote");
     } finally {
       setStatusBusyId("");
+    }
+  };
+
+  const downloadQuotesExcel = async (quotes: QuoteRecord[], filename: string, successMessage: string) => {
+    if (!quotes.length) return;
+    setQuoteTransferBusy(true);
+    try {
+      const { createQuotesWorkbook } = await import("../lib/quote-excel");
+      const bytes = createQuotesWorkbook(quotes, settings);
+      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      flash(successMessage);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Unable to export Excel file");
+    } finally {
+      setQuoteTransferBusy(false);
+    }
+  };
+
+  const exportQuotes = async () => {
+    if (!session?.quotes.length) return;
+    await downloadQuotesExcel(session.quotes, `e3-quotes-${today()}.xlsx`, `${session.quotes.length} quotes exported to Excel`);
+  };
+
+  const exportSingleQuote = async (quote: QuoteRecord) => {
+    const projectName = quote.projectName || quote.payload.customerName || "quote";
+    await downloadQuotesExcel([quote], `e3-${safeExportName(projectName)}-${today()}.xlsx`, `${projectName} exported to Excel`);
+  };
+
+  const importQuotesFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setQuoteTransferBusy(true);
+    try {
+      if (file.size > 20 * 1024 * 1024) throw new Error("Import file must be smaller than 20 MB");
+      const { parseQuotesWorkbook } = await import("../lib/quote-excel");
+      const payloads = parseQuotesWorkbook(await file.arrayBuffer());
+      const response = await fetch("/api/quotes/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payloads),
+      });
+      const data = await response.json() as { imported?: number; error?: string };
+      if (!response.ok || !data.imported) throw new Error(data.error ?? "Unable to import quotes");
+      await loadSession();
+      flash(`${data.imported} quotes imported as Done`);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Unable to import Excel file");
+    } finally {
+      event.target.value = "";
+      setQuoteTransferBusy(false);
     }
   };
 
@@ -459,7 +525,14 @@ export function QuoteTool() {
 
         {tab === "history" && (
           <section className="panel standalone">
-            <div className="section-heading"><div><span>◷</span><h2>Shared quotes</h2></div><small>Everyone can view and edit · admins can delete</small></div>
+            <div className="section-heading history-heading"><div><span>◷</span><h2>Shared quotes</h2></div><div className="history-heading-actions">
+              <small>Everyone can view and edit · admins can delete</small>
+              <div className="quote-transfer-actions">
+                <input ref={quoteImportRef} hidden type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" onChange={importQuotesFile} />
+                <button type="button" className="quote-transfer-btn" disabled={quoteTransferBusy} onClick={() => quoteImportRef.current?.click()}>{quoteTransferBusy ? "Importing…" : "↓ Import"}</button>
+                <button type="button" className="quote-transfer-btn export" disabled={quoteTransferBusy || session.quotes.length === 0} onClick={() => void exportQuotes()}>{quoteTransferBusy ? "Working…" : "↑ Export all"}</button>
+              </div>
+            </div></div>
             {session.quotes.length === 0 ? <EmptyState /> : (
               <>
                 <label className="history-search">
@@ -485,6 +558,7 @@ export function QuoteTool() {
                         <span className="chevron">›</span>
                       </button>
                       <div className="history-actions">
+                        <button type="button" className="export-quote-btn" disabled={quoteTransferBusy} onClick={() => void exportSingleQuote(quote)}>{quoteTransferBusy ? "Working…" : "Export"}</button>
                         <label className="history-status">
                           <span className="sr-only">Quote status</span>
                           <select className={quote.status} value={quote.status} disabled={statusBusyId === quote.id} onChange={(event) => void changeQuoteStatus(quote.id, event.target.value as QuoteStatus)}>
