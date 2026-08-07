@@ -3,8 +3,8 @@
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
-import type { AppSettings, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
-import { updatePvSize } from "../lib/quote-inputs";
+import type { AppSettings, CiBatterySelection, CiInverterSelection, CiPvSystem, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
+import { normalizeQuoteConfiguration, setQuoteMode, syncCiLegacyFields, updatePvSize } from "../lib/quote-inputs";
 
 type UserRow = { userId: string; email: string; displayName: string; role: Role; createdAt: string };
 type SessionData = { viewer: Viewer; settings: AppSettings; quotes: QuoteRecord[]; users: UserRow[]; notifications: SystemNotification[] };
@@ -107,6 +107,8 @@ export function QuoteTool() {
       quote.payload.phone,
       quote.payload.initiator,
       quote.ownerName,
+      quote.payload.ciInverters?.map((item) => item.model).join(" "),
+      quote.payload.ciBatteries?.map((item) => item.kwh).join(" "),
     ].some((value) => String(value ?? "").toLowerCase().includes(query)));
   }, [quoteSearch, session?.quotes]);
   const role = session?.viewer.role ?? "user";
@@ -123,6 +125,78 @@ export function QuoteTool() {
   };
   const setPvSize = (value: number) => {
     setInputs((current) => updatePvSize(current, value));
+  };
+  const quantity = (value: number) => Math.max(1, Math.floor(Number.isFinite(value) ? value : 1));
+  const updateCiPvSystem = (id: string, patch: Partial<CiPvSystem>) => {
+    setInputs((current) => {
+      const manualCosts = { ...current.manualCosts };
+      delete manualCosts.accessories;
+      delete manualCosts.solarInstallation;
+      return syncCiLegacyFields({
+        ...current,
+        manualCosts,
+        ciPvSystems: (current.ciPvSystems ?? []).map((item) => item.id === id
+          ? { ...item, ...patch, sizeKw: Math.max(0, patch.sizeKw ?? item.sizeKw), quantity: quantity(patch.quantity ?? item.quantity) }
+          : item),
+      });
+    });
+  };
+  const updateCiInverter = (id: string, patch: Partial<CiInverterSelection>) => {
+    setInputs((current) => syncCiLegacyFields({
+      ...current,
+      ciInverters: (current.ciInverters ?? []).map((item) => item.id === id
+        ? { ...item, ...patch, quantity: quantity(patch.quantity ?? item.quantity) }
+        : item),
+    }));
+  };
+  const updateCiBattery = (id: string, patch: Partial<CiBatterySelection>) => {
+    setInputs((current) => {
+      const manualCosts = { ...current.manualCosts };
+      delete manualCosts.batteryInstallation;
+      return syncCiLegacyFields({
+        ...current,
+        manualCosts,
+        ciBatteries: (current.ciBatteries ?? []).map((item) => item.id === id
+          ? { ...item, ...patch, kwh: Math.max(0, patch.kwh ?? item.kwh), quantity: quantity(patch.quantity ?? item.quantity) }
+          : item),
+      });
+    });
+  };
+  const addCiPvSystem = () => setInputs((current) => {
+    const manualCosts = { ...current.manualCosts };
+    delete manualCosts.accessories;
+    delete manualCosts.solarInstallation;
+    return syncCiLegacyFields({
+      ...current,
+      manualCosts,
+      ciPvSystems: [...(current.ciPvSystems ?? []), { id: crypto.randomUUID(), sizeKw: 0, quantity: 1 }],
+    });
+  });
+  const addCiInverter = () => setInputs((current) => syncCiLegacyFields({
+    ...current,
+    ciInverters: [...(current.ciInverters ?? []), { id: crypto.randomUUID(), model: settings?.inverters[0]?.name ?? "", quantity: 1 }],
+  }));
+  const addCiBattery = () => setInputs((current) => {
+    const manualCosts = { ...current.manualCosts };
+    delete manualCosts.batteryInstallation;
+    return syncCiLegacyFields({
+      ...current,
+      manualCosts,
+      ciBatteries: [...(current.ciBatteries ?? []), { id: crypto.randomUUID(), kwh: settings?.batteries[0]?.kwh ?? 0, quantity: 1 }],
+    });
+  });
+  const removeCiSelection = (key: "ciPvSystems" | "ciInverters" | "ciBatteries", id: string) => {
+    setInputs((current) => {
+      const items = current[key] ?? [];
+      if (items.length <= 1) return current;
+      const manualCosts = { ...current.manualCosts };
+      if (key === "ciPvSystems") {
+        delete manualCosts.accessories;
+        delete manualCosts.solarInstallation;
+      }
+      if (key === "ciBatteries") delete manualCosts.batteryInstallation;
+      return syncCiLegacyFields({ ...current, manualCosts, [key]: items.filter((item) => item.id !== id) });
+    });
   };
   const addCustomItem = () => {
     setInputs((current) => ({
@@ -411,8 +485,8 @@ export function QuoteTool() {
           </div>
           <div className="top-actions">
             {tab === "quote" && <div className="mode-switch" role="group" aria-label="Quote mode">
-              <button type="button" className={!isCiMode ? "active" : ""} aria-pressed={!isCiMode} onClick={() => setField("mode", "residential")}>Residential</button>
-              <button type="button" className={isCiMode ? "active" : ""} aria-pressed={isCiMode} onClick={() => setField("mode", "ci")}>C&amp;I</button>
+              <button type="button" className={!isCiMode ? "active" : ""} aria-pressed={!isCiMode} onClick={() => setInputs((current) => setQuoteMode(current, "residential", settings))}>Residential</button>
+              <button type="button" className={isCiMode ? "active" : ""} aria-pressed={isCiMode} onClick={() => setInputs((current) => setQuoteMode(current, "ci", settings))}>C&amp;I</button>
             </div>}
             <button className="ghost-btn mobile-hide" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
             <button className="ghost-btn" disabled={busy} onClick={() => void signOut()}>Sign out</button>
@@ -424,7 +498,7 @@ export function QuoteTool() {
         {tab === "quote" && (
           <div className="quote-layout">
             <div className="form-column">
-              <section className="panel project-panel">
+              <section className={`panel project-panel ${isCiMode ? "ci-project-panel" : ""}`}>
                 <div className="section-heading"><div><span>01</span><h2>Project information</h2></div><small>Standard users can edit orange fields</small></div>
                 <div className="project-columns">
                   <div className="project-column customer-details">
@@ -437,9 +511,33 @@ export function QuoteTool() {
                   </div>
                   <div className="project-column system-details">
                     <div className="column-label">System configuration</div>
-                    <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={setPvSize} /></Field>
-                    <Field label="Inverter"><select value={inputs.inverter} onChange={(e) => setField("inverter", e.target.value)}>{settings.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
-                    <Field label="Battery size"><select value={inputs.batteryKwh} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{settings.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
+                    {!isCiMode ? <>
+                      <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={setPvSize} /></Field>
+                      <Field label="Inverter"><select value={inputs.inverter} onChange={(e) => setField("inverter", e.target.value)}>{settings.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
+                      <Field label="Battery size"><select value={inputs.batteryKwh} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{settings.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
+                    </> : <div className="ci-config-stack">
+                      <CiConfigGroup label="PV systems" total={`${result.totalPvSize} kW`} addLabel="Add PV system" onAdd={addCiPvSystem}>
+                        {(inputs.ciPvSystems ?? []).map((item) => <div className="ci-config-row pv" key={item.id}>
+                          <Field label="System size"><NumberInput value={item.sizeKw} suffix="kW" onChange={(value) => updateCiPvSystem(item.id, { sizeKw: value })} /></Field>
+                          <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => updateCiPvSystem(item.id, { quantity: value })} /></Field>
+                          <RemoveCiButton label="PV system" disabled={(inputs.ciPvSystems?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciPvSystems", item.id)} />
+                        </div>)}
+                      </CiConfigGroup>
+                      <CiConfigGroup label="Inverters" total={`${(inputs.ciInverters ?? []).reduce((sum, item) => sum + item.quantity, 0)} units`} addLabel="Add inverter" onAdd={addCiInverter}>
+                        {(inputs.ciInverters ?? []).map((item) => <div className="ci-config-row" key={item.id}>
+                          <Field label="Model"><select value={item.model} onChange={(event) => updateCiInverter(item.id, { model: event.target.value })}>{settings.inverters.map((option) => <option key={option.name}>{option.name}</option>)}</select></Field>
+                          <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => updateCiInverter(item.id, { quantity: value })} /></Field>
+                          <RemoveCiButton label="inverter" disabled={(inputs.ciInverters?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciInverters", item.id)} />
+                        </div>)}
+                      </CiConfigGroup>
+                      <CiConfigGroup label="Batteries" total={`${result.totalBatteryKwh} kWh`} addLabel="Add battery" onAdd={addCiBattery}>
+                        {(inputs.ciBatteries ?? []).map((item) => <div className="ci-config-row" key={item.id}>
+                          <Field label="Model"><select value={item.kwh} onChange={(event) => updateCiBattery(item.id, { kwh: num(event.target.value) })}>{settings.batteries.map((option) => <option key={option.kwh} value={option.kwh}>{option.name}</option>)}</select></Field>
+                          <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => updateCiBattery(item.id, { quantity: value })} /></Field>
+                          <RemoveCiButton label="battery" disabled={(inputs.ciBatteries?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciBatteries", item.id)} />
+                        </div>)}
+                      </CiConfigGroup>
+                    </div>}
                   </div>
                 </div>
               </section>
@@ -545,14 +643,14 @@ export function QuoteTool() {
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
-                    const openQuote = () => { setQuoteId(quote.id); setInputs({ ...quote.payload, mode: quote.payload.mode ?? "residential", discount: Math.abs(quote.payload.discount ?? 0), customItems: quote.payload.customItems ?? [], manualMargins: quote.payload.manualMargins ?? {} }); setTab("quote"); };
+                    const openQuote = () => { setQuoteId(quote.id); setInputs(normalizeQuoteConfiguration({ ...quote.payload, mode: quote.payload.mode ?? "residential", discount: Math.abs(quote.payload.discount ?? 0), customItems: quote.payload.customItems ?? [], manualMargins: quote.payload.manualMargins ?? {} }, settings)); setTab("quote"); };
                     return <div className="history-row" key={quote.id}>
                       <button className="history-main" onClick={openQuote}>
                         <span className="history-customer"><b>{quote.projectName}{quote.payload.mode === "ci" && <em className="ci-badge">C&amp;I</em>}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Created by {quote.ownerName}</small></span>
                         <span className="history-config">
-                          <span><em>Solar</em><b>{quote.payload.pvSize || "-"} kW</b></span>
-                          <span><em>Battery</em><b>{quote.payload.batteryKwh || "-"} kWh</b></span>
-                          <span><em>Inverter</em><b>{quote.payload.inverter || "No inverter selected"}</b></span>
+                          <span><em>Solar</em><b>{calculated.totalPvSize || "-"} kW</b></span>
+                          <span><em>Battery</em><b>{calculated.totalBatteryKwh || "-"} kWh</b></span>
+                          <span><em>Inverter</em><b>{quote.payload.mode === "ci" ? calculated.inverterSummary : quote.payload.inverter || "No inverter selected"}</b></span>
                         </span>
                         <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
                         <span className="chevron">›</span>
@@ -634,6 +732,23 @@ function LoginScreen({
       </section>
     </main>
   );
+}
+
+function CiConfigGroup({ label, total, addLabel, onAdd, children }: {
+  label: string;
+  total: string;
+  addLabel: string;
+  onAdd: () => void;
+  children: React.ReactNode;
+}) {
+  return <section className="ci-config-group">
+    <div className="ci-config-heading"><div><b>{label}</b><span>{total} total</span></div><button type="button" onClick={onAdd}>＋ {addLabel}</button></div>
+    <div className="ci-config-rows">{children}</div>
+  </section>;
+}
+
+function RemoveCiButton({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
+  return <button type="button" className="ci-remove-btn" aria-label={`Remove ${label}`} disabled={disabled} onClick={onClick}>×</button>;
 }
 
 function Field({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {

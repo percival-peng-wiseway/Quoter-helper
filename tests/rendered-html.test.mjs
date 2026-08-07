@@ -213,6 +213,82 @@ test("supports per-quote C&I margins and manual STC funding", async () => {
   assert.doesNotMatch(quoteTool, />Shortfall</);
 });
 
+test("aggregates multiple C&I PV systems, inverter models and battery models", async () => {
+  const { calculateQuote } = await loadTypeScriptModule("lib/calculate.ts");
+  const settings = {
+    thresholds: { approval: 0.1, target: 0.2 },
+    gstRate: 0.1,
+    solarStcUnitPrice: 10,
+    batteryStcUnitPrice: 20,
+    stcScaleFactor: 1,
+    stcYears: 1,
+    panelBatchWatts: 1000,
+    panelBatchCost: 100,
+    accessoryCostPerKw: 10,
+    solarInstallCostPerKw: 20,
+    batteryInstallCost: 100,
+    deliveryCost: 0,
+    blinkFee: 0,
+    margins: {},
+    inverters: [{ name: "INV-A", cost: 100 }, { name: "INV-B", cost: 300 }],
+    batteries: [
+      { name: "BAT-5", kwh: 5, certificates: 10, cost: 500 },
+      { name: "BAT-10", kwh: 10, certificates: 20, cost: 900 },
+    ],
+  };
+  const result = calculateQuote({
+    ...defaultQuoteForPvSizeTest(),
+    mode: "ci",
+    pvSize: 1,
+    batteryKwh: 5,
+    inverter: "INV-A",
+    ciPvSystems: [
+      { id: "pv-a", sizeKw: 6.6, quantity: 2 },
+      { id: "pv-b", sizeKw: 10, quantity: 1 },
+    ],
+    ciInverters: [
+      { id: "inv-a", model: "INV-A", quantity: 2 },
+      { id: "inv-b", model: "INV-B", quantity: 1 },
+    ],
+    ciBatteries: [
+      { id: "bat-a", kwh: 5, quantity: 3 },
+      { id: "bat-b", kwh: 10, quantity: 1 },
+    ],
+  }, settings);
+
+  const cost = (key) => result.lineItems.find((item) => item.key === key).cost;
+  assert.ok(Math.abs(result.totalPvSize - 23.2) < 1e-9);
+  assert.equal(result.totalBatteryKwh, 25);
+  assert.equal(result.solarCertificates, 23);
+  assert.equal(result.batteryCertificates, 50);
+  assert.equal(cost("solarPanel"), 2400);
+  assert.equal(cost("inverter"), 500);
+  assert.equal(cost("battery"), 2400);
+  assert.ok(Math.abs(cost("accessories") - 232) < 1e-9);
+  assert.ok(Math.abs(cost("solarInstallation") - 464) < 1e-9);
+  assert.equal(cost("batteryInstallation"), 400);
+  assert.equal(result.inverterSummary, "2 × INV-A; 1 × INV-B");
+  assert.equal(result.batterySummary, "3 × 5 kWh; 1 × 10 kWh");
+
+  const [quoteTool, model, transfer] = await Promise.all([
+    readFile(new URL("app/QuoteTool.tsx", root), "utf8"),
+    readFile(new URL("lib/model.ts", root), "utf8"),
+    readFile(new URL("lib/quote-transfer.ts", root), "utf8"),
+  ]);
+  assert.match(model, /ciPvSystems\?: CiPvSystem\[\]/);
+  assert.match(model, /ciInverters\?: CiInverterSelection\[\]/);
+  assert.match(model, /ciBatteries\?: CiBatterySelection\[\]/);
+  assert.match(quoteTool, /Add PV system/);
+  assert.match(quoteTool, /Add inverter/);
+  assert.match(quoteTool, /Add battery/);
+  assert.match(quoteTool, /label="Quantity"/);
+  assert.match(quoteTool, /calculated\.totalPvSize/);
+  assert.match(quoteTool, /calculated\.inverterSummary/);
+  assert.match(transfer, /raw\.ciPvSystems/);
+  assert.match(transfer, /raw\.ciInverters/);
+  assert.match(transfer, /raw\.ciBatteries/);
+});
+
 test("uses editable per-kW base rates without exposing formulas in the calculator", async () => {
   const { defaultSettings, normalizeSettings } = await loadTypeScriptModule("lib/defaults.ts");
   const { updatePvSize } = await loadTypeScriptModule("lib/quote-inputs.ts");
@@ -291,6 +367,15 @@ test("exports project breakdown sheets, round-trips XLSX and reads an XLSM quote
     pvSize: 12.5,
     customerBalance: 9000,
     manualMargins: { solarPanel: 0.18 },
+    ciPvSystems: [{ id: "pv-1", sizeKw: 6.25, quantity: 2 }],
+    ciInverters: [
+      { id: "inv-1", model: defaultSettings.inverters[0].name, quantity: 2 },
+      { id: "inv-2", model: defaultSettings.inverters[1].name, quantity: 1 },
+    ],
+    ciBatteries: [
+      { id: "bat-1", kwh: defaultSettings.batteries[0].kwh, quantity: 2 },
+      { id: "bat-2", kwh: defaultSettings.batteries[1].kwh, quantity: 1 },
+    ],
   };
   const bytes = createQuotesWorkbook([{
     id: "quote-1",
@@ -308,6 +393,8 @@ test("exports project breakdown sheets, round-trips XLSX and reads an XLSM quote
   assert.ok(exportedWorkbook.SheetNames.includes("Instructions"));
   assert.equal(exportedWorkbook.Workbook.Sheets.find((sheet) => sheet.name === "Quotes").Hidden, 1);
   assert.equal(exportedWorkbook.Sheets.Summary.A1.v, "E3 Quote Portfolio Summary");
+  assert.equal(exportedWorkbook.Sheets.Summary.G6.v, 12.5);
+  assert.equal(exportedWorkbook.Sheets.Summary.H6.v, 27.84);
   assert.equal(exportedWorkbook.Sheets.Summary.L6.f, "'01 Excel Round Trip'!E36");
   assert.equal(exportedWorkbook.Sheets["01 Excel Round Trip"].A11.v, "Quote Breakdown");
   assert.equal(exportedWorkbook.Sheets["01 Excel Round Trip"].D13.f, "B13*(1+C13)");
@@ -317,6 +404,9 @@ test("exports project breakdown sheets, round-trips XLSX and reads an XLSM quote
   assert.equal(roundTrip.mode, "ci");
   assert.equal(roundTrip.pvSize, 12.5);
   assert.deepEqual(roundTrip.manualMargins, { solarPanel: 0.18 });
+  assert.deepEqual(roundTrip.ciPvSystems, payload.ciPvSystems);
+  assert.deepEqual(roundTrip.ciInverters, payload.ciInverters);
+  assert.deepEqual(roundTrip.ciBatteries, payload.ciBatteries);
 
   const xlsmWorkbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(xlsmWorkbook, XLSX.utils.json_to_sheet([{

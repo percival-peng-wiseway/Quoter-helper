@@ -12,6 +12,24 @@ export type BatteryItem = CatalogItem & {
   certificates: number;
 };
 
+export type CiPvSystem = {
+  id: string;
+  sizeKw: number;
+  quantity: number;
+};
+
+export type CiInverterSelection = {
+  id: string;
+  model: string;
+  quantity: number;
+};
+
+export type CiBatterySelection = {
+  id: string;
+  kwh: number;
+  quantity: number;
+};
+
 export type AppSettings = {
   thresholds: { approval: number; target: number };
   gstRate: number;
@@ -40,6 +58,9 @@ export type QuoteInputs = {
   pvSize: number;
   batteryKwh: number;
   inverter: string;
+  ciPvSystems?: CiPvSystem[];
+  ciInverters?: CiInverterSelection[];
+  ciBatteries?: CiBatterySelection[];
   initiator: string;
   customerBalance: number;
   solarVicRebate: number;
@@ -108,6 +129,11 @@ export type LineItemResult = {
 
 export type CalculationResult = {
   lineItems: LineItemResult[];
+  totalPvSize: number;
+  totalBatteryKwh: number;
+  pvSummary: string;
+  inverterSummary: string;
+  batterySummary: string;
   solarCertificates: number;
   solarStc: number;
   batteryCertificates: number;

@@ -1,5 +1,5 @@
 import { defaultQuote } from "./defaults";
-import type { QuoteInputs } from "./model";
+import type { CiBatterySelection, CiInverterSelection, CiPvSystem, QuoteInputs } from "./model";
 
 export const MAX_IMPORT_QUOTES = 500;
 
@@ -16,6 +16,7 @@ const optionalNumber = (value: unknown) => {
   const parsed = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : undefined;
 };
+const quantityValue = (value: unknown) => Math.max(1, Math.floor(numberValue(value, 1)));
 
 const manualCostKeys: Array<keyof QuoteInputs["manualCosts"]> = [
   "solarPanel", "backup", "accessories", "solarInstallation", "batteryInstallation", "delivery",
@@ -63,6 +64,30 @@ function normalizeImportedQuote(entry: unknown, index: number): QuoteInputs {
       margin: Math.max(0, numberValue(custom.margin)),
     };
   }) : [];
+  const ciPvSystems: CiPvSystem[] | undefined = Array.isArray(raw.ciPvSystems) ? raw.ciPvSystems.slice(0, 50).map((item, itemIndex) => {
+    const selection = isRecord(item) ? item : {};
+    return {
+      id: stringValue(selection.id).trim() || `import-pv-${itemIndex + 1}-${crypto.randomUUID()}`,
+      sizeKw: Math.max(0, numberValue(selection.sizeKw)),
+      quantity: quantityValue(selection.quantity),
+    };
+  }).filter((item) => item.sizeKw > 0) : undefined;
+  const ciInverters: CiInverterSelection[] | undefined = Array.isArray(raw.ciInverters) ? raw.ciInverters.slice(0, 50).map((item, itemIndex) => {
+    const selection = isRecord(item) ? item : {};
+    return {
+      id: stringValue(selection.id).trim() || `import-inverter-${itemIndex + 1}-${crypto.randomUUID()}`,
+      model: stringValue(selection.model).trim(),
+      quantity: quantityValue(selection.quantity),
+    };
+  }).filter((item) => item.model) : undefined;
+  const ciBatteries: CiBatterySelection[] | undefined = Array.isArray(raw.ciBatteries) ? raw.ciBatteries.slice(0, 50).map((item, itemIndex) => {
+    const selection = isRecord(item) ? item : {};
+    return {
+      id: stringValue(selection.id).trim() || `import-battery-${itemIndex + 1}-${crypto.randomUUID()}`,
+      kwh: Math.max(0, numberValue(selection.kwh)),
+      quantity: quantityValue(selection.quantity),
+    };
+  }).filter((item) => item.kwh > 0) : undefined;
 
   return {
     ...defaultQuote,
@@ -74,6 +99,9 @@ function normalizeImportedQuote(entry: unknown, index: number): QuoteInputs {
     pvSize: Math.max(0, numberValue(raw.pvSize)),
     batteryKwh: Math.max(0, numberValue(raw.batteryKwh, defaultQuote.batteryKwh)),
     inverter: stringValue(raw.inverter, defaultQuote.inverter),
+    ciPvSystems,
+    ciInverters,
+    ciBatteries,
     initiator: stringValue(raw.initiator),
     customerBalance: numberValue(raw.customerBalance, defaultQuote.customerBalance),
     solarVicRebate: Math.max(0, numberValue(raw.solarVicRebate)),

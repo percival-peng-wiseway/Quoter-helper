@@ -50,31 +50,34 @@ const parseJsonCell = (value: unknown, fallback: unknown) => {
 };
 
 export function createQuotesWorkbook(quotes: QuoteRecord[], settings: AppSettings): Uint8Array {
-  const rows: ExcelRow[] = quotes.map((quote) => ({
-    "Status": quote.status === "done" ? "Done" : "Drafting",
-    "Customer Name": quote.payload.customerName,
-    "Date": quote.payload.date,
-    "Mode": quote.payload.mode === "ci" ? "C&I" : "Residential",
-    "Phone": quote.payload.phone,
-    "Address": quote.payload.address,
-    "E3 Energy Initiator": quote.payload.initiator,
-    "PV System Size (kW)": quote.payload.pvSize,
-    "Battery Size (kWh)": quote.payload.batteryKwh,
-    "Inverter": quote.payload.inverter,
-    "Customer Balance (incl. GST)": quote.payload.customerBalance,
-    "Solar VIC Rebate": quote.payload.solarVicRebate,
-    "Solar VIC Interest Free Loan": quote.payload.solarVicLoan,
-    "Discount": quote.payload.discount,
-    "Solar STC (Manual)": numberOrBlank(quote.payload.manualSolarStc),
-    "Battery STC (Manual)": numberOrBlank(quote.payload.manualBatteryStc),
-    "Manual Costs JSON": JSON.stringify(quote.payload.manualCosts ?? {}),
-    "Manual Margins JSON": JSON.stringify(quote.payload.manualMargins ?? {}),
-    "Custom Items JSON": JSON.stringify(quote.payload.customItems ?? []),
-    "Owner": quote.ownerName,
-    "Created At": quote.createdAt,
-    "Updated At": quote.updatedAt,
-    "E3 Payload JSON": JSON.stringify(quote.payload),
-  }));
+  const rows: ExcelRow[] = quotes.map((quote) => {
+    const result = calculateQuote(quote.payload, settings);
+    return {
+      "Status": quote.status === "done" ? "Done" : "Drafting",
+      "Customer Name": quote.payload.customerName,
+      "Date": quote.payload.date,
+      "Mode": quote.payload.mode === "ci" ? "C&I" : "Residential",
+      "Phone": quote.payload.phone,
+      "Address": quote.payload.address,
+      "E3 Energy Initiator": quote.payload.initiator,
+      "PV System Size (kW)": result.totalPvSize,
+      "Battery Size (kWh)": result.totalBatteryKwh,
+      "Inverter": quote.payload.mode === "ci" ? result.inverterSummary : quote.payload.inverter,
+      "Customer Balance (incl. GST)": quote.payload.customerBalance,
+      "Solar VIC Rebate": quote.payload.solarVicRebate,
+      "Solar VIC Interest Free Loan": quote.payload.solarVicLoan,
+      "Discount": quote.payload.discount,
+      "Solar STC (Manual)": numberOrBlank(quote.payload.manualSolarStc),
+      "Battery STC (Manual)": numberOrBlank(quote.payload.manualBatteryStc),
+      "Manual Costs JSON": JSON.stringify(quote.payload.manualCosts ?? {}),
+      "Manual Margins JSON": JSON.stringify(quote.payload.manualMargins ?? {}),
+      "Custom Items JSON": JSON.stringify(quote.payload.customItems ?? []),
+      "Owner": quote.ownerName,
+      "Created At": quote.createdAt,
+      "Updated At": quote.updatedAt,
+      "E3 Payload JSON": JSON.stringify(quote.payload),
+    };
+  });
 
   const importWorksheet = XLSX.utils.json_to_sheet(rows, { header: [...headers] });
   importWorksheet["!cols"] = headers.map((header) => ({ wch: columnWidth(header) }));
@@ -146,8 +149,8 @@ function createSummarySheet(
       quote.status === "done" ? "Done" : "Drafting",
       marginStatusLabel(result.status),
       quote.ownerName,
-      quote.payload.pvSize,
-      quote.payload.batteryKwh,
+      result.totalPvSize,
+      result.totalBatteryKwh,
       quote.payload.customerBalance,
       result.totalReceivedExGst,
       result.totalCostExGst,
@@ -212,8 +215,8 @@ function createProjectSheet(
     ["Address", quote.payload.address],
     ["Phone", quote.payload.phone, "", "Owner", quote.ownerName],
     ["Quote Type", quote.payload.mode === "ci" ? "C&I" : "Residential", "", "Initiator", quote.payload.initiator],
-    ["PV System Size", quote.payload.pvSize, "kW", "Battery Size", quote.payload.batteryKwh, "kWh"],
-    ["Inverter", quote.payload.inverter],
+    ["PV System Size", result.totalPvSize, "kW", "Battery Size", result.totalBatteryKwh, "kWh"],
+    ["Inverter", quote.payload.mode === "ci" ? result.inverterSummary : quote.payload.inverter],
     [],
     ["Quote Breakdown"],
     ["Item", "Cost", "Margin", "Sales Price", "Notes"],
@@ -223,7 +226,8 @@ function createProjectSheet(
   const firstItemRow = 13;
   result.lineItems.forEach((item, index) => {
     const row = firstItemRow + index;
-    XLSX.utils.sheet_add_aoa(sheet, [[item.label, item.cost, item.margin, item.salesPrice, item.note ?? ""]], { origin: `A${row}` });
+    const excelNote = item.note?.replace(/; /g, "\n") ?? "";
+    XLSX.utils.sheet_add_aoa(sheet, [[item.label, item.cost, item.margin, item.salesPrice, excelNote]], { origin: `A${row}` });
     setFormulaCell(sheet, `D${row}`, `=B${row}*(1+C${row})`, item.salesPrice);
   });
   const lastItemRow = firstItemRow + result.lineItems.length - 1;
@@ -292,7 +296,7 @@ function createProjectSheet(
     XLSX.utils.decode_range("B9:F9"), XLSX.utils.decode_range("A11:F11"),
     XLSX.utils.decode_range(`A${sectionRow}:C${sectionRow}`), XLSX.utils.decode_range(`D${sectionRow}:F${sectionRow}`),
   ];
-  sheet["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 13 }, { wch: 34 }, { wch: 21 }, { wch: 16 }];
+  sheet["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 13 }, { wch: 34 }, { wch: 46 }, { wch: 16 }];
   sheet["!rows"] = [{ hpt: 28 }, { hpt: 20 }, { hpt: 22 }, { hpt: 22 }, { hpt: 22 }, { hpt: 22 }, { hpt: 22 }, { hpt: 22 }, { hpt: 22 }, { hpt: 8 }, { hpt: 24 }, { hpt: 24 }];
   (sheet as XLSX.WorkSheet & { "!freeze"?: unknown })["!freeze"] = { xSplit: 0, ySplit: 12, topLeftCell: `A${firstItemRow}`, activePane: "bottomLeft", state: "frozen" };
   applyRangeStyle(sheet, "A1:F1", titleStyle);
@@ -301,6 +305,14 @@ function createProjectSheet(
   applyRangeStyle(sheet, "A11:F11", sectionStyle);
   applyRangeStyle(sheet, "A12:E12", tableHeaderStyle);
   applyRangeStyle(sheet, `A${firstItemRow}:E${lastItemRow}`, bodyStyle);
+  applyRangeStyle(sheet, `E${firstItemRow}:E${lastItemRow}`, notesStyle);
+  result.lineItems.forEach((item, index) => {
+    if (!item.note) return;
+    const rowIndex = firstItemRow + index - 1;
+    const rows = sheet["!rows"] ?? [];
+    rows[rowIndex] = { hpt: item.note.length > 70 ? 40 : 28 };
+    sheet["!rows"] = rows;
+  });
   applyRangeStyle(sheet, `A${subtotalRow}:E${subtotalRow}`, totalStyle);
   applyRangeStyle(sheet, `A${sectionRow}:F${sectionRow}`, sectionStyle);
   applyRangeStyle(sheet, `A${firstSummaryRow}:B${firstSummaryRow + fundingRows.length - 1}`, bodyStyle);
@@ -359,6 +371,7 @@ const sectionStyle = { fill: { patternType: "solid", fgColor: { rgb: "12271E" } 
 const tableHeaderStyle = { fill: { patternType: "solid", fgColor: { rgb: "F58A42" } }, font: { bold: true, color: { rgb: "FFFFFF" } }, alignment: { vertical: "center", horizontal: "left" }, border: { bottom: { style: "thin", color: { rgb: "D96B24" } } } };
 const kpiStyle = { fill: { patternType: "solid", fgColor: { rgb: "FFF4EC" } }, font: { bold: true, color: { rgb: "8F4515" } }, alignment: { vertical: "center" } };
 const bodyStyle = { font: { color: { rgb: "24342C" } }, alignment: { vertical: "center" }, border: { bottom: { style: "thin", color: { rgb: "DDE5E0" } } } };
+const notesStyle = { ...bodyStyle, alignment: { vertical: "center", wrapText: true } };
 const totalStyle = { fill: { patternType: "solid", fgColor: { rgb: "EAF1ED" } }, font: { bold: true, color: { rgb: "12271E" } }, border: { top: { style: "thin", color: { rgb: "9DB2A6" } }, bottom: { style: "double", color: { rgb: "648071" } } } };
 
 function applyRangeStyle(sheet: XLSX.WorkSheet, rangeAddress: string, style: UnknownRecord) {
