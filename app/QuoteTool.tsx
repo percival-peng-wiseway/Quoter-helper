@@ -16,6 +16,18 @@ const num = (value: string) => Number.isFinite(Number(value)) ? Number(value) : 
 const inputNumber = (value: number) => value === 0 ? "" : String(Math.round((value + Number.EPSILON) * 100_000_000) / 100_000_000);
 const percentageRate = (value: number) => Math.round((value / 100) * 1_000_000) / 1_000_000;
 const batteryModelLabel = (name: string) => name.replace(/^\s*\d+\s*[×x]\s*/i, "");
+const sigBatteryStcReference: Array<{ batteryKwh: number; stc: number } | null> = [
+  { batteryKwh: 16, stc: 101 },
+  { batteryKwh: 24, stc: 133 },
+  { batteryKwh: 32, stc: 155 },
+  { batteryKwh: 40, stc: 163 },
+  { batteryKwh: 48, stc: 171 },
+  null,
+  { batteryKwh: 20, stc: 119 },
+  { batteryKwh: 30, stc: 154 },
+  { batteryKwh: 40, stc: 164 },
+  { batteryKwh: 50, stc: 174 },
+];
 const quoteCreatedDateKey = (value: string) => value.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? "";
 const quoteCreatedDateLabel = (value: string) => {
   const key = quoteCreatedDateKey(value);
@@ -525,6 +537,7 @@ export function QuoteTool() {
   const notifications = session.notifications ?? [];
   const isCiMode = inputs.mode === "ci";
   const equipmentBrand = inputs.equipmentBrand === "sig" ? "sig" : "fox";
+  const stcIsEditable = isCiMode || equipmentBrand === "sig";
   const equipmentCatalogs = getEquipmentCatalogs(settings, equipmentBrand, isCiMode ? "ci" : "residential");
   const brandHasInverters = equipmentCatalogs.inverters.length > 0;
   const brandHasBatteries = equipmentCatalogs.batteries.length > 0;
@@ -677,10 +690,10 @@ export function QuoteTool() {
                     </div>
                   </div>
                   <div className="funding-panel">
-                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>{isCiMode ? "C&I: STCs and margins are editable" : "Enter deductions as positive amounts"}</small></div>
+                    <div className="embedded-heading"><b>Rebates & customer balance</b><small>{isCiMode ? "C&I: STCs and margins are editable" : equipmentBrand === "sig" ? "SIG Residential: STCs are editable" : "Enter deductions as positive amounts"}</small></div>
                     <div className="funding-grid">
-                      {isCiMode ? <ManualStcField label="Solar STC" value={result.solarStc} detail={`${result.solarCertificates} calculated certificates`} onChange={(v) => setField("manualSolarStc", Math.max(0, v))} /> : <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />}
-                      {isCiMode ? <ManualStcField label="Battery STC" value={result.batteryStc} detail={`${result.batteryCertificates} calculated certificates`} onChange={(v) => setField("manualBatteryStc", Math.max(0, v))} /> : <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />}
+                      {stcIsEditable ? <ManualStcField label="Solar STC" value={result.solarStc} detail={`${result.solarCertificates} calculated certificates`} onChange={(v) => setField("manualSolarStc", Math.max(0, v))} /> : <Readout label="Solar STC" value={money.format(result.solarStc)} detail={`${result.solarCertificates} certificates × ${money.format(settings.solarStcUnitPrice)}`} />}
+                      {stcIsEditable ? <ManualStcField label="Battery STC" value={result.batteryStc} detail={`${result.batteryCertificates} calculated certificates`} onChange={(v) => setField("manualBatteryStc", Math.max(0, v))} /> : <Readout label="Battery STC" value={money.format(result.batteryStc)} detail={`${result.batteryCertificates} certificates × ${money.format(settings.batteryStcUnitPrice)}`} />}
                       <Field label="Solar VIC Rebate"><NumberInput prefix="$" value={inputs.solarVicRebate} onChange={(v) => setField("solarVicRebate", Math.max(0, v))} /></Field>
                       <Field label="Solar VIC Interest Free Loan"><NumberInput prefix="$" value={inputs.solarVicLoan} onChange={(v) => setField("solarVicLoan", Math.max(0, v))} /></Field>
                       <div className="funding-final-row">
@@ -978,7 +991,20 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
       <CatalogItemPanel letter="H" title="SIG Gateway" catalogKey="sigGateways" settings={settings} onChange={onChange} showDescription />
       <CatalogItemPanel letter="I" title="SIG Accessories" catalogKey="sigAccessories" settings={settings} onChange={onChange} showDescription />
     </div>
+    <SigBatteryStcReferencePanel />
   </div>;
+}
+
+function SigBatteryStcReferencePanel() {
+  return <section className="panel standalone sig-stc-reference-panel">
+    <div className="section-heading"><div><span>J</span><h2>SIG Battery STC reference</h2></div><small>Display only · not used in calculations</small></div>
+    <div className="sig-stc-reference-table" role="table" aria-label="SIG Battery STC reference">
+      <div className="sig-stc-reference-head" role="row"><span role="columnheader">BAT kWh</span><span role="columnheader">STC</span></div>
+      {sigBatteryStcReference.map((item, index) => item
+        ? <div className="sig-stc-reference-row" role="row" key={`${item.batteryKwh}-${item.stc}-${index}`}><span role="cell">{item.batteryKwh}</span><span role="cell">{item.stc}</span></div>
+        : <div className="sig-stc-reference-separator" aria-hidden="true" key={`separator-${index}`} />)}
+    </div>
+  </section>;
 }
 
 function CatalogItemPanel({ letter, title, catalogKey, settings, onChange, showDescription }: {

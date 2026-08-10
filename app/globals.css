@@ -280,6 +280,15 @@ select:disabled { border-color: #d9e0db; background: #f3f6f4; color: #87938b; cu
 .catalog-head { color: #878f89; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .catalog-row input { height: 34px; }
 .catalog-row .number-input { border-color: #f0cba9; background: #fffaf5; }
+.sig-stc-reference-panel { max-width: 720px; }
+.sig-stc-reference-table { overflow: hidden; border: 1px solid #dce4de; border-radius: 10px; background: #fff; }
+.sig-stc-reference-head, .sig-stc-reference-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sig-stc-reference-head { background: #f2f6f3; color: #66746b; font-size: 11px; font-weight: 820; letter-spacing: .06em; text-transform: uppercase; }
+.sig-stc-reference-head span, .sig-stc-reference-row span { padding: 10px 14px; border-right: 1px solid #e1e7e2; }
+.sig-stc-reference-head span:last-child, .sig-stc-reference-row span:last-child { border-right: 0; }
+.sig-stc-reference-row { border-top: 1px solid #e8ede9; color: #34443a; font-size: 13px; font-variant-numeric: tabular-nums; }
+.sig-stc-reference-row span { text-align: right; }
+.sig-stc-reference-separator { height: 16px; border-top: 1px solid #e8ede9; background: #fafcfb; }
 .catalog-placeholder { min-height: 300px; display: grid; place-content: center; justify-items: center; padding: 28px; border: 1px dashed #d7dfd9; border-radius: 12px; background: #fafcfb; text-align: center; }
 .catalog-placeholder > span { padding: 4px 8px; border-radius: 99px; background: var(--orange-soft); color: var(--orange-dark); font-size: 10px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .catalog-placeholder b { margin-top: 12px; color: #34463b; font-size: 16px; }

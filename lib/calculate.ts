@@ -157,7 +157,7 @@ export function calculateQuote(
   const solarCertificates = Math.floor(pvSize * settings.stcScaleFactor * settings.stcYears);
   const calculatedSolarStc = solarCertificates * settings.solarStcUnitPrice;
   const calculatedBatteryStc = batteryCertificates * settings.batteryStcUnitPrice;
-  const manualStc = (value: number | undefined, fallback: number) => isCiMode && typeof value === "number" && Number.isFinite(value)
+  const manualStc = (value: number | undefined, fallback: number) => (isCiMode || isSig) && typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, value)
     : fallback;
   const solarStc = manualStc(inputs.manualSolarStc, calculatedSolarStc);

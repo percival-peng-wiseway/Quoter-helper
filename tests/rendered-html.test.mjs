@@ -337,6 +337,8 @@ test("uses Residential and C&I SIG catalogues with multiple equipment, gateways 
   const sigInputs = setEquipmentBrand(base, "sig", settings);
   const sig = calculateQuote({
     ...sigInputs,
+    manualSolarStc: 1234,
+    manualBatteryStc: 5678,
     sigInverters: [
       { id: "res-inv-a", model: "SIG-RES-INV-A", quantity: 2 },
       { id: "res-inv-b", model: "SIG-RES-INV-B", quantity: 1 },
@@ -357,6 +359,8 @@ test("uses Residential and C&I SIG catalogues with multiple equipment, gateways 
   assert.equal(cost(sig, "sigAccessories"), 400);
   assert.equal(sig.totalBatteryKwh, 24);
   assert.equal(sig.batteryCertificates, 0);
+  assert.equal(sig.solarStc, 1234);
+  assert.equal(sig.batteryStc, 5678);
   assert.equal(sig.inverterSummary, "2 × SIG-RES-INV-A; 1 × SIG-RES-INV-B");
   assert.equal(sig.gatewaySummary, "1 × SIG-GATEWAY");
   assert.equal(sig.accessoriesSummary, "4 × SIG-ACCESSORY");
@@ -397,6 +401,9 @@ test("uses Residential and C&I SIG catalogues with multiple equipment, gateways 
   assert.match(quoteTool, /title="SIG C&I Battery"/);
   assert.match(quoteTool, /title="SIG Gateway"/);
   assert.match(quoteTool, /title="SIG Accessories"/);
+  assert.match(quoteTool, /SIG Battery STC reference/);
+  assert.match(quoteTool, /Display only · not used in calculations/);
+  assert.match(quoteTool, /stcIsEditable = isCiMode \|\| equipmentBrand === "sig"/);
   assert.match(quoteTool, /Total sales price \(excl\. GST\)/);
 });
 
