@@ -1,5 +1,5 @@
 import { defaultQuote } from "./defaults";
-import type { CiBatterySelection, CiInverterSelection, CiPvSystem, QuoteInputs } from "./model";
+import type { CiBatterySelection, CiInverterSelection, CiPvSystem, EquipmentSelection, QuoteInputs } from "./model";
 
 export const MAX_IMPORT_QUOTES = 500;
 
@@ -88,10 +88,21 @@ function normalizeImportedQuote(entry: unknown, index: number): QuoteInputs {
       quantity: quantityValue(selection.quantity),
     };
   }).filter((item) => item.kwh > 0) : undefined;
+  const equipmentSelections = (value: unknown, prefix: string): EquipmentSelection[] | undefined => Array.isArray(value)
+    ? value.slice(0, 100).map((item, itemIndex) => {
+      const selection = isRecord(item) ? item : {};
+      return {
+        id: stringValue(selection.id).trim() || `${prefix}-${itemIndex + 1}-${crypto.randomUUID()}`,
+        model: stringValue(selection.model).trim(),
+        quantity: quantityValue(selection.quantity),
+      };
+    }).filter((item) => item.model)
+    : undefined;
 
   return {
     ...defaultQuote,
     mode: raw.mode === "ci" ? "ci" : "residential",
+    equipmentBrand: raw.equipmentBrand === "sig" ? "sig" : "fox",
     date: stringValue(raw.date),
     customerName,
     phone: stringValue(raw.phone),
@@ -102,6 +113,10 @@ function normalizeImportedQuote(entry: unknown, index: number): QuoteInputs {
     ciPvSystems,
     ciInverters,
     ciBatteries,
+    sigInverters: equipmentSelections(raw.sigInverters, "import-sig-inverter"),
+    sigBatteries: equipmentSelections(raw.sigBatteries, "import-sig-battery"),
+    sigGateways: equipmentSelections(raw.sigGateways, "import-sig-gateway"),
+    sigAccessories: equipmentSelections(raw.sigAccessories, "import-sig-accessory"),
     initiator: stringValue(raw.initiator),
     customerBalance: numberValue(raw.customerBalance, defaultQuote.customerBalance),
     solarVicRebate: Math.max(0, numberValue(raw.solarVicRebate)),

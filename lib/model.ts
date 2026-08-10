@@ -1,10 +1,12 @@
 export type Role = "admin" | "user";
 export type QuoteStatus = "drafting" | "done";
 export type QuoteMode = "residential" | "ci";
+export type EquipmentBrand = "fox" | "sig";
 
 export type CatalogItem = {
   name: string;
   cost: number;
+  description?: string;
 };
 
 export type BatteryItem = CatalogItem & {
@@ -30,6 +32,12 @@ export type CiBatterySelection = {
   quantity: number;
 };
 
+export type EquipmentSelection = {
+  id: string;
+  model: string;
+  quantity: number;
+};
+
 export type AppSettings = {
   thresholds: { approval: number; target: number };
   gstRate: number;
@@ -47,10 +55,17 @@ export type AppSettings = {
   margins: Record<string, number>;
   inverters: CatalogItem[];
   batteries: BatteryItem[];
+  sigResidentialInverters: CatalogItem[];
+  sigResidentialBatteries: BatteryItem[];
+  sigCiInverters: CatalogItem[];
+  sigCiBatteries: BatteryItem[];
+  sigGateways: CatalogItem[];
+  sigAccessories: CatalogItem[];
 };
 
 export type QuoteInputs = {
   mode?: QuoteMode;
+  equipmentBrand?: EquipmentBrand;
   date: string;
   customerName: string;
   phone: string;
@@ -61,6 +76,10 @@ export type QuoteInputs = {
   ciPvSystems?: CiPvSystem[];
   ciInverters?: CiInverterSelection[];
   ciBatteries?: CiBatterySelection[];
+  sigInverters?: EquipmentSelection[];
+  sigBatteries?: EquipmentSelection[];
+  sigGateways?: EquipmentSelection[];
+  sigAccessories?: EquipmentSelection[];
   initiator: string;
   customerBalance: number;
   solarVicRebate: number;
@@ -134,6 +153,8 @@ export type CalculationResult = {
   pvSummary: string;
   inverterSummary: string;
   batterySummary: string;
+  gatewaySummary: string;
+  accessoriesSummary: string;
   solarCertificates: number;
   solarStc: number;
   batteryCertificates: number;
@@ -145,6 +166,7 @@ export type CalculationResult = {
   gstRefund: number;
   lineItemCostTotal: number;
   lineItemSalesTotal: number;
+  totalSalesPriceExGst: number;
   grossMargin: number;
   grossMarginRate: number;
   quoteRequiredBalance: number;

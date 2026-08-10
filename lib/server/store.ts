@@ -125,7 +125,7 @@ function describeSettingsChange(before: AppSettings, after: AppSettings): string
     backup: "Backup margin", accessories: "Accessories margin", solarInstallation: "Solar installation margin",
     batteryInstallation: "Battery installation margin", delivery: "Delivery margin", acCable: "AC cable run margin",
     blinkFee: "Blink fee margin", switchboard: "Switchboard upgrade margin", subSwitchboard: "Sub switchboard margin",
-    externalCommission: "External commission margin",
+    externalCommission: "External commission margin", sigGateway: "SIG gateway margin", sigAccessories: "SIG accessories margin",
   };
   new Set([...Object.keys(before.margins), ...Object.keys(after.margins)]).forEach((key) => {
     add(marginLabels[key] ?? `${key} margin`, percent(before.margins[key] ?? 0), percent(after.margins[key] ?? 0));
@@ -156,6 +156,31 @@ function describeSettingsChange(before: AppSettings, after: AppSettings): string
       add(`Battery ${index + 1} STC certificates`, number(oldItem.certificates), number(newItem.certificates));
     }
   }
+
+  const sigCatalogues = [
+    ["SIG residential inverter", before.sigResidentialInverters, after.sigResidentialInverters],
+    ["SIG residential battery", before.sigResidentialBatteries, after.sigResidentialBatteries],
+    ["SIG C&I inverter", before.sigCiInverters, after.sigCiInverters],
+    ["SIG C&I battery", before.sigCiBatteries, after.sigCiBatteries],
+    ["SIG gateway", before.sigGateways, after.sigGateways],
+    ["SIG accessory", before.sigAccessories, after.sigAccessories],
+  ] as const;
+  sigCatalogues.forEach(([label, oldItems, newItems]) => {
+    const count = Math.max(oldItems.length, newItems.length);
+    for (let index = 0; index < count; index += 1) {
+      const oldItem = oldItems[index];
+      const newItem = newItems[index];
+      if (!oldItem && newItem) changed.push(`${label} added: ${newItem.name} (${money(newItem.cost)})`);
+      else if (oldItem && !newItem) changed.push(`${label} removed: ${oldItem.name} (${money(oldItem.cost)})`);
+      else if (oldItem && newItem) {
+        add(`${label} ${index + 1} model`, oldItem.name, newItem.name);
+        add(`${newItem.name} description`, oldItem.description ?? "", newItem.description ?? "");
+        add(`${newItem.name} cost`, money(oldItem.cost), money(newItem.cost));
+        if ("kwh" in oldItem && "kwh" in newItem) add(`${newItem.name} capacity`, `${number(oldItem.kwh)} kWh`, `${number(newItem.kwh)} kWh`);
+        if ("certificates" in oldItem && "certificates" in newItem) add(`${newItem.name} STC certificates`, number(oldItem.certificates), number(newItem.certificates));
+      }
+    }
+  });
 
   return changed.length > 0 ? changed.join("\n") : null;
 }

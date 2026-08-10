@@ -3,8 +3,8 @@
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { calculateQuote } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
-import type { AppSettings, CiBatterySelection, CiInverterSelection, CiPvSystem, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
-import { normalizeQuoteConfiguration, setQuoteMode, syncCiLegacyFields, updatePvSize } from "../lib/quote-inputs";
+import type { AppSettings, CatalogItem, CiBatterySelection, CiInverterSelection, CiPvSystem, EquipmentSelection, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
+import { getEquipmentCatalogs, normalizeQuoteConfiguration, setEquipmentBrand as applyEquipmentBrand, setQuoteMode, syncCiLegacyFields, updatePvSize } from "../lib/quote-inputs";
 
 type UserRow = { userId: string; email: string; displayName: string; role: Role; createdAt: string };
 type SessionData = { viewer: Viewer; settings: AppSettings; quotes: QuoteRecord[]; users: UserRow[]; notifications: SystemNotification[] };
@@ -16,6 +16,14 @@ const num = (value: string) => Number.isFinite(Number(value)) ? Number(value) : 
 const inputNumber = (value: number) => value === 0 ? "" : String(Math.round((value + Number.EPSILON) * 100_000_000) / 100_000_000);
 const percentageRate = (value: number) => Math.round((value / 100) * 1_000_000) / 1_000_000;
 const batteryModelLabel = (name: string) => name.replace(/^\s*\d+\s*[×x]\s*/i, "");
+const quoteCreatedDateKey = (value: string) => value.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? "";
+const quoteCreatedDateLabel = (value: string) => {
+  const key = quoteCreatedDateKey(value);
+  if (!key) return "Unknown date";
+  const [year, month, day] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-AU", { day: "2-digit", month: "short", year: "numeric" })
+    .format(new Date(year, month - 1, day));
+};
 const notificationTime = (value: string) => {
   const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const date = new Date(normalized);
@@ -48,6 +56,9 @@ export function QuoteTool() {
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("quote");
   const [quoteSearch, setQuoteSearch] = useState("");
+  const [quoteInitiatorFilter, setQuoteInitiatorFilter] = useState("");
+  const [quoteCreatedFrom, setQuoteCreatedFrom] = useState("");
+  const [quoteCreatedTo, setQuoteCreatedTo] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
   const [quoteTransferBusy, setQuoteTransferBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -98,20 +109,40 @@ export function QuoteTool() {
 
   const settings = session?.settings;
   const result = useMemo(() => settings ? calculateQuote(inputs, settings) : null, [inputs, settings]);
+  const initiatorOptions = useMemo(() => Array.from(new Set((session?.quotes ?? [])
+    .map((quote) => quote.payload.initiator?.trim())
+    .filter((value): value is string => Boolean(value))))
+    .sort((left, right) => left.localeCompare(right, "en-AU", { sensitivity: "base" })), [session?.quotes]);
   const filteredQuotes = useMemo(() => {
     const query = quoteSearch.trim().toLowerCase();
-    if (!query) return session?.quotes ?? [];
-    return (session?.quotes ?? []).filter((quote) => [
-      quote.projectName,
-      quote.payload.customerName,
-      quote.payload.address,
-      quote.payload.phone,
-      quote.payload.initiator,
-      quote.ownerName,
-      quote.payload.ciInverters?.map((item) => item.model).join(" "),
-      quote.payload.ciBatteries?.map((item) => item.kwh).join(" "),
-    ].some((value) => String(value ?? "").toLowerCase().includes(query)));
-  }, [quoteSearch, session?.quotes]);
+    return (session?.quotes ?? []).filter((quote) => {
+      const matchesSearch = !query || [
+        quote.projectName,
+        quote.payload.customerName,
+        quote.payload.address,
+        quote.payload.phone,
+        quote.payload.initiator,
+        quote.ownerName,
+        quote.payload.ciInverters?.map((item) => item.model).join(" "),
+        quote.payload.ciBatteries?.map((item) => item.kwh).join(" "),
+      ].some((value) => String(value ?? "").toLowerCase().includes(query));
+      const initiator = quote.payload.initiator?.trim() ?? "";
+      const matchesInitiator = !quoteInitiatorFilter
+        || quoteInitiatorFilter === "__none__" && !initiator
+        || initiator === quoteInitiatorFilter;
+      const createdDate = quoteCreatedDateKey(quote.createdAt);
+      const matchesCreatedFrom = !quoteCreatedFrom || Boolean(createdDate && createdDate >= quoteCreatedFrom);
+      const matchesCreatedTo = !quoteCreatedTo || Boolean(createdDate && createdDate <= quoteCreatedTo);
+      return matchesSearch && matchesInitiator && matchesCreatedFrom && matchesCreatedTo;
+    });
+  }, [quoteCreatedFrom, quoteCreatedTo, quoteInitiatorFilter, quoteSearch, session?.quotes]);
+  const hasHistoryFilters = Boolean(quoteSearch || quoteInitiatorFilter || quoteCreatedFrom || quoteCreatedTo);
+  const clearHistoryFilters = () => {
+    setQuoteSearch("");
+    setQuoteInitiatorFilter("");
+    setQuoteCreatedFrom("");
+    setQuoteCreatedTo("");
+  };
   const role = session?.viewer.role ?? "user";
   const isAdmin = role === "admin";
 
@@ -173,17 +204,21 @@ export function QuoteTool() {
       ciPvSystems: [...(current.ciPvSystems ?? []), { id: crypto.randomUUID(), sizeKw: 0, quantity: 1 }],
     });
   });
-  const addCiInverter = () => setInputs((current) => syncCiLegacyFields({
-    ...current,
-    ciInverters: [...(current.ciInverters ?? []), { id: crypto.randomUUID(), model: settings?.inverters[0]?.name ?? "", quantity: 1 }],
-  }));
+  const addCiInverter = () => setInputs((current) => {
+    const catalog = settings ? getEquipmentCatalogs(settings, "fox", "ci") : { inverters: [], batteries: [] };
+    return syncCiLegacyFields({
+      ...current,
+      ciInverters: [...(current.ciInverters ?? []), { id: crypto.randomUUID(), model: catalog.inverters[0]?.name ?? "", quantity: 1 }],
+    });
+  });
   const addCiBattery = () => setInputs((current) => {
     const manualCosts = { ...current.manualCosts };
     delete manualCosts.batteryInstallation;
+    const catalog = settings ? getEquipmentCatalogs(settings, "fox", "ci") : { inverters: [], batteries: [] };
     return syncCiLegacyFields({
       ...current,
       manualCosts,
-      ciBatteries: [...(current.ciBatteries ?? []), { id: crypto.randomUUID(), kwh: settings?.batteries[0]?.kwh ?? 0, quantity: 1 }],
+      ciBatteries: [...(current.ciBatteries ?? []), { id: crypto.randomUUID(), kwh: catalog.batteries[0]?.kwh ?? 0, quantity: 1 }],
     });
   });
   const removeCiSelection = (key: "ciPvSystems" | "ciInverters" | "ciBatteries", id: string) => {
@@ -197,6 +232,50 @@ export function QuoteTool() {
       }
       if (key === "ciBatteries") delete manualCosts.batteryInstallation;
       return syncCiLegacyFields({ ...current, manualCosts, [key]: items.filter((item) => item.id !== id) });
+    });
+  };
+  const sigCatalogFor = (key: "sigInverters" | "sigBatteries" | "sigGateways" | "sigAccessories", current: QuoteInputs) => {
+    if (!settings) return [];
+    const catalogs = getEquipmentCatalogs(settings, "sig", current.mode === "ci" ? "ci" : "residential");
+    return key === "sigInverters" ? catalogs.inverters
+      : key === "sigBatteries" ? catalogs.batteries
+        : key === "sigGateways" ? catalogs.gateways
+          : catalogs.accessories;
+  };
+  const updateSigSelection = (key: "sigInverters" | "sigBatteries" | "sigGateways" | "sigAccessories", id: string, patch: Partial<EquipmentSelection>) => {
+    setInputs((current) => {
+      const manualCosts = { ...current.manualCosts };
+      if (key === "sigBatteries") delete manualCosts.batteryInstallation;
+      return syncCiLegacyFields({
+        ...current,
+        manualCosts,
+        [key]: (current[key] ?? []).map((item) => item.id === id
+        ? { ...item, ...patch, quantity: quantity(patch.quantity ?? item.quantity) }
+        : item),
+      }, settings);
+    });
+  };
+  const addSigSelection = (key: "sigInverters" | "sigBatteries" | "sigGateways" | "sigAccessories") => {
+    setInputs((current) => {
+      const catalog = sigCatalogFor(key, current);
+      if (!catalog.length) return current;
+      const manualCosts = { ...current.manualCosts };
+      if (key === "sigBatteries") delete manualCosts.batteryInstallation;
+      return syncCiLegacyFields({
+        ...current,
+        manualCosts,
+        [key]: [...(current[key] ?? []), { id: crypto.randomUUID(), model: catalog[0].name, quantity: 1 }],
+      }, settings);
+    });
+  };
+  const removeSigSelection = (key: "sigInverters" | "sigBatteries" | "sigGateways" | "sigAccessories", id: string) => {
+    setInputs((current) => {
+      const items = current[key] ?? [];
+      const required = key === "sigInverters" || key === "sigBatteries";
+      if (required && items.length <= 1) return current;
+      const manualCosts = { ...current.manualCosts };
+      if (key === "sigBatteries") delete manualCosts.batteryInstallation;
+      return syncCiLegacyFields({ ...current, manualCosts, [key]: items.filter((item) => item.id !== id) }, settings);
     });
   };
   const addCustomItem = () => {
@@ -445,6 +524,10 @@ export function QuoteTool() {
   ];
   const notifications = session.notifications ?? [];
   const isCiMode = inputs.mode === "ci";
+  const equipmentBrand = inputs.equipmentBrand === "sig" ? "sig" : "fox";
+  const equipmentCatalogs = getEquipmentCatalogs(settings, equipmentBrand, isCiMode ? "ci" : "residential");
+  const brandHasInverters = equipmentCatalogs.inverters.length > 0;
+  const brandHasBatteries = equipmentCatalogs.batteries.length > 0;
 
   return (
     <div className="app-shell">
@@ -499,7 +582,7 @@ export function QuoteTool() {
         {tab === "quote" && (
           <div className="quote-layout">
             <div className="form-column">
-              <section className={`panel project-panel ${isCiMode ? "ci-project-panel" : ""}`}>
+              <section className={`panel project-panel ${isCiMode ? "ci-project-panel" : ""} ${equipmentBrand === "sig" ? "sig-project-panel" : ""}`}>
                 <div className="section-heading"><div><span>01</span><h2>Project information</h2></div><small>Standard users can edit orange fields</small></div>
                 <div className="project-columns">
                   <div className="project-column customer-details">
@@ -512,10 +595,29 @@ export function QuoteTool() {
                   </div>
                   <div className="project-column system-details">
                     <div className="column-label">System configuration</div>
-                    {!isCiMode ? <>
+                    <div className="equipment-brand-field">
+                      <span>Equipment brand</span>
+                      <div className="equipment-brand-switch" role="group" aria-label="Equipment brand">
+                        <button type="button" className={equipmentBrand === "fox" ? "active" : ""} aria-pressed={equipmentBrand === "fox"} onClick={() => setInputs((current) => applyEquipmentBrand(current, "fox", settings))}>FOX</button>
+                        <button type="button" className={equipmentBrand === "sig" ? "active" : ""} aria-pressed={equipmentBrand === "sig"} onClick={() => setInputs((current) => applyEquipmentBrand(current, "sig", settings))}>SIG</button>
+                      </div>
+                    </div>
+                    {equipmentBrand === "sig" ? <div className="ci-config-stack sig-config-stack">
+                      {!isCiMode ? <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={setPvSize} /></Field> : <CiConfigGroup label="PV systems" total={`${result.totalPvSize} kW`} addLabel="Add PV system" onAdd={addCiPvSystem}>
+                        {(inputs.ciPvSystems ?? []).map((item) => <div className="ci-config-row pv" key={item.id}>
+                          <Field label="System size"><NumberInput value={item.sizeKw} suffix="kW" onChange={(value) => updateCiPvSystem(item.id, { sizeKw: value })} /></Field>
+                          <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => updateCiPvSystem(item.id, { quantity: value })} /></Field>
+                          <RemoveCiButton label="PV system" disabled={(inputs.ciPvSystems?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciPvSystems", item.id)} />
+                        </div>)}
+                      </CiConfigGroup>}
+                      <SigEquipmentGroup label="Inverters" addLabel="Add inverter" total={`${(inputs.sigInverters ?? []).reduce((sum, item) => sum + item.quantity, 0)} units`} items={inputs.sigInverters ?? []} options={equipmentCatalogs.inverters} required onAdd={() => addSigSelection("sigInverters")} onUpdate={(id, patch) => updateSigSelection("sigInverters", id, patch)} onRemove={(id) => removeSigSelection("sigInverters", id)} />
+                      <SigEquipmentGroup label="Batteries & controllers" addLabel="Add battery" total={`${(inputs.sigBatteries ?? []).reduce((sum, item) => sum + item.quantity, 0)} items · ${result.totalBatteryKwh} kWh`} items={inputs.sigBatteries ?? []} options={equipmentCatalogs.batteries} required onAdd={() => addSigSelection("sigBatteries")} onUpdate={(id, patch) => updateSigSelection("sigBatteries", id, patch)} onRemove={(id) => removeSigSelection("sigBatteries", id)} />
+                      <SigEquipmentGroup label="Gateways" addLabel="Add gateway" total={`${(inputs.sigGateways ?? []).reduce((sum, item) => sum + item.quantity, 0)} units`} items={inputs.sigGateways ?? []} options={equipmentCatalogs.gateways} onAdd={() => addSigSelection("sigGateways")} onUpdate={(id, patch) => updateSigSelection("sigGateways", id, patch)} onRemove={(id) => removeSigSelection("sigGateways", id)} />
+                      <SigEquipmentGroup label="SIG accessories" addLabel="Add accessory" total={`${(inputs.sigAccessories ?? []).reduce((sum, item) => sum + item.quantity, 0)} items`} items={inputs.sigAccessories ?? []} options={equipmentCatalogs.accessories} onAdd={() => addSigSelection("sigAccessories")} onUpdate={(id, patch) => updateSigSelection("sigAccessories", id, patch)} onRemove={(id) => removeSigSelection("sigAccessories", id)} />
+                    </div> : !isCiMode ? <>
                       <Field label="PV system size"><NumberInput value={inputs.pvSize} suffix="kW" onChange={setPvSize} /></Field>
-                      <Field label="Inverter"><select value={inputs.inverter} onChange={(e) => setField("inverter", e.target.value)}>{settings.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
-                      <Field label="Battery size"><select value={inputs.batteryKwh} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{settings.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
+                      <Field label="Inverter"><select value={inputs.inverter} disabled={!brandHasInverters} onChange={(e) => setField("inverter", e.target.value)}>{!brandHasInverters && <option value="">No {equipmentBrand.toUpperCase()} inverter data yet</option>}{equipmentCatalogs.inverters.map((item) => <option key={item.name}>{item.name}</option>)}</select></Field>
+                      <Field label="Battery size"><select value={inputs.batteryKwh} disabled={!brandHasBatteries} onChange={(e) => setField("batteryKwh", num(e.target.value))}>{!brandHasBatteries && <option value={0}>No {equipmentBrand.toUpperCase()} battery data yet</option>}{equipmentCatalogs.batteries.map((item) => <option key={item.kwh} value={item.kwh}>{item.kwh} kWh</option>)}</select></Field>
                     </> : <div className="ci-config-stack">
                       <CiConfigGroup label="PV systems" total={`${result.totalPvSize} kW`} addLabel="Add PV system" onAdd={addCiPvSystem}>
                         {(inputs.ciPvSystems ?? []).map((item) => <div className="ci-config-row pv" key={item.id}>
@@ -524,16 +626,16 @@ export function QuoteTool() {
                           <RemoveCiButton label="PV system" disabled={(inputs.ciPvSystems?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciPvSystems", item.id)} />
                         </div>)}
                       </CiConfigGroup>
-                      <CiConfigGroup label="Inverters" total={`${(inputs.ciInverters ?? []).reduce((sum, item) => sum + item.quantity, 0)} units`} addLabel="Add inverter" onAdd={addCiInverter}>
+                      <CiConfigGroup label="Inverters" total={`${(inputs.ciInverters ?? []).reduce((sum, item) => sum + item.quantity, 0)} units`} addLabel="Add inverter" disabled={!brandHasInverters} onAdd={addCiInverter}>
                         {(inputs.ciInverters ?? []).map((item) => <div className="ci-config-row" key={item.id}>
-                          <Field label="Model"><select value={item.model} onChange={(event) => updateCiInverter(item.id, { model: event.target.value })}>{settings.inverters.map((option) => <option key={option.name}>{option.name}</option>)}</select></Field>
+                          <Field label="Model"><select value={item.model} disabled={!brandHasInverters} onChange={(event) => updateCiInverter(item.id, { model: event.target.value })}>{!brandHasInverters && <option value="">No {equipmentBrand.toUpperCase()} inverter data yet</option>}{equipmentCatalogs.inverters.map((option) => <option key={option.name}>{option.name}</option>)}</select></Field>
                           <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => updateCiInverter(item.id, { quantity: value })} /></Field>
                           <RemoveCiButton label="inverter" disabled={(inputs.ciInverters?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciInverters", item.id)} />
                         </div>)}
                       </CiConfigGroup>
-                      <CiConfigGroup label="Batteries" total={`${result.totalBatteryKwh} kWh`} addLabel="Add battery" onAdd={addCiBattery}>
+                      <CiConfigGroup label="Batteries" total={`${result.totalBatteryKwh} kWh`} addLabel="Add battery" disabled={!brandHasBatteries} onAdd={addCiBattery}>
                         {(inputs.ciBatteries ?? []).map((item) => <div className="ci-config-row" key={item.id}>
-                          <Field label="Model"><select value={item.kwh} onChange={(event) => updateCiBattery(item.id, { kwh: num(event.target.value) })}>{settings.batteries.map((option) => <option key={option.kwh} value={option.kwh}>{batteryModelLabel(option.name)}</option>)}</select></Field>
+                          <Field label="Model"><select value={item.kwh} disabled={!brandHasBatteries} onChange={(event) => updateCiBattery(item.id, { kwh: num(event.target.value) })}>{!brandHasBatteries && <option value={0}>No {equipmentBrand.toUpperCase()} battery data yet</option>}{equipmentCatalogs.batteries.map((option) => <option key={option.kwh} value={option.kwh}>{batteryModelLabel(option.name)}</option>)}</select></Field>
                           <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => updateCiBattery(item.id, { quantity: value })} /></Field>
                           <RemoveCiButton label="battery" disabled={(inputs.ciBatteries?.length ?? 0) <= 1} onClick={() => removeCiSelection("ciBatteries", item.id)} />
                         </div>)}
@@ -608,6 +710,7 @@ export function QuoteTool() {
                 <div className="section-heading compact"><div><h2>Margin summary</h2></div><span className="live-pill"><i /> Live</span></div>
                 <Metric label="Total received (excl. GST)" value={money.format(result.totalReceivedExGst)} />
                 <Metric label="Total cost (excl. GST)" value={money.format(result.totalCostExGst)} />
+                <Metric label="Total sales price (excl. GST)" value={money.format(result.totalSalesPriceExGst)} />
                 <Metric label="Net GST" value={money.format(result.netGst)} muted />
                 <Metric label="Gross Margin" value={money.format(result.grossMargin)} accent />
               </section>
@@ -639,19 +742,29 @@ export function QuoteTool() {
                   <input type="search" value={quoteSearch} onChange={(event) => setQuoteSearch(event.target.value)} placeholder="Search by name, address or phone" aria-label="Search saved quotes" />
                   {quoteSearch && <button type="button" onClick={() => setQuoteSearch("")}>Clear</button>}
                 </label>
+                <div className="history-filter-bar" aria-label="Quote filters">
+                  <label><span>Initiator</span><select value={quoteInitiatorFilter} onChange={(event) => setQuoteInitiatorFilter(event.target.value)}>
+                    <option value="">All initiators</option>
+                    {initiatorOptions.map((initiator) => <option key={initiator} value={initiator}>{initiator}</option>)}
+                    <option value="__none__">No initiator</option>
+                  </select></label>
+                  <label><span>Created from</span><input type="date" value={quoteCreatedFrom} max={quoteCreatedTo || undefined} onChange={(event) => setQuoteCreatedFrom(event.target.value)} /></label>
+                  <label><span>Created to</span><input type="date" value={quoteCreatedTo} min={quoteCreatedFrom || undefined} onChange={(event) => setQuoteCreatedTo(event.target.value)} /></label>
+                  <div className="history-filter-summary"><span>Showing <b>{filteredQuotes.length}</b> of {session.quotes.length}</span><button type="button" disabled={!hasHistoryFilters} onClick={clearHistoryFilters}>Clear filters</button></div>
+                </div>
                 {filteredQuotes.length === 0 ? (
-                  <div className="empty search-empty"><span>⌕</span><h3>No matching quotes</h3><p>Try another customer name, project address or Energy Initiator.</p></div>
+                  <div className="empty search-empty"><span>⌕</span><h3>No matching quotes</h3><p>Try another search, Initiator or creation date range.</p></div>
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);
                     const openQuote = () => { setQuoteId(quote.id); setInputs(normalizeQuoteConfiguration({ ...quote.payload, mode: quote.payload.mode ?? "residential", discount: Math.abs(quote.payload.discount ?? 0), customItems: quote.payload.customItems ?? [], manualMargins: quote.payload.manualMargins ?? {} }, settings)); setTab("quote"); };
                     return <div className="history-row" key={quote.id}>
                       <button className="history-main" onClick={openQuote}>
-                        <span className="history-customer"><b>{quote.projectName}{quote.payload.mode === "ci" && <em className="ci-badge">C&amp;I</em>}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Created by {quote.ownerName}</small></span>
+                        <span className="history-customer"><b>{quote.projectName}{quote.payload.mode === "ci" && <em className="ci-badge">C&amp;I</em>}</b><small>{quote.payload.address || "No address entered"}</small><small>{quote.payload.phone || "No phone entered"} · Saved by {quote.ownerName}</small><small><strong>Initiator:</strong> {quote.payload.initiator?.trim() || "Not entered"} · <strong>Created:</strong> {quoteCreatedDateLabel(quote.createdAt)}</small></span>
                         <span className="history-config">
                           <span><em>Solar</em><b>{calculated.totalPvSize || "-"} kW</b></span>
                           <span><em>Battery</em><b>{calculated.totalBatteryKwh || "-"} kWh</b></span>
-                          <span><em>Inverter</em><b>{quote.payload.mode === "ci" ? calculated.inverterSummary : quote.payload.inverter || "No inverter selected"}</b></span>
+                          <span><em>Inverter</em><b>{quote.payload.mode === "ci" || quote.payload.equipmentBrand === "sig" ? calculated.inverterSummary : quote.payload.inverter || "No inverter selected"}</b></span>
                         </span>
                         <span className="history-margin"><b>{money.format(calculated.grossMargin)}</b><small className={`mini-status ${calculated.status}`}>{pct(calculated.grossMarginRate)}</small></span>
                         <span className="chevron">›</span>
@@ -735,17 +848,39 @@ function LoginScreen({
   );
 }
 
-function CiConfigGroup({ label, total, addLabel, onAdd, children }: {
+function CiConfigGroup({ label, total, addLabel, disabled, onAdd, children }: {
   label: string;
   total: string;
   addLabel: string;
+  disabled?: boolean;
   onAdd: () => void;
   children: React.ReactNode;
 }) {
   return <section className="ci-config-group">
-    <div className="ci-config-heading"><div><b>{label}</b><span>{total} total</span></div><button type="button" onClick={onAdd}>＋ {addLabel}</button></div>
+    <div className="ci-config-heading"><div><b>{label}</b><span>{total} total</span></div><button type="button" disabled={disabled} onClick={onAdd}>＋ {addLabel}</button></div>
     <div className="ci-config-rows">{children}</div>
   </section>;
+}
+
+function SigEquipmentGroup({ label, total, addLabel, items, options, required, onAdd, onUpdate, onRemove }: {
+  label: string;
+  total: string;
+  addLabel: string;
+  items: EquipmentSelection[];
+  options: CatalogItem[];
+  required?: boolean;
+  onAdd: () => void;
+  onUpdate: (id: string, patch: Partial<EquipmentSelection>) => void;
+  onRemove: (id: string) => void;
+}) {
+  return <CiConfigGroup label={label} total={total} addLabel={addLabel} disabled={!options.length} onAdd={onAdd}>
+    {items.length === 0 && <div className="sig-selection-empty">No {label.toLowerCase()} added</div>}
+    {items.map((item) => <div className="ci-config-row" key={item.id}>
+      <Field label="Model"><select value={item.model} onChange={(event) => onUpdate(item.id, { model: event.target.value })}>{options.map((option) => <option key={option.name} value={option.name}>{option.name}</option>)}</select></Field>
+      <Field label="Quantity"><NumberInput value={item.quantity} onChange={(value) => onUpdate(item.id, { quantity: value })} /></Field>
+      <RemoveCiButton label={label.toLowerCase()} disabled={Boolean(required && items.length <= 1)} onClick={() => onRemove(item.id)} />
+    </div>)}
+  </CiConfigGroup>;
 }
 
 function RemoveCiButton({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
@@ -828,16 +963,52 @@ function AdminSettings({ settings, onChange }: { settings: AppSettings; onChange
       </div>
     </section>
     <div className="catalog-split">
-      <section className="panel standalone">
-        <div className="section-heading"><div><span>B</span><h2>Inverter catalogue</h2></div><small>{settings.inverters.length} models</small></div>
-        <div className="catalog-table"><div className="catalog-head"><span>Model</span><span>Sydney warehouse cost (excl. GST)</span></div>{settings.inverters.map((item, index) => <div className="catalog-row" key={item.name}><input value={item.name} onChange={(e) => { const next = structuredClone(settings); next.inverters[index].name = e.target.value; onChange(next); }} /><NumberInput compact prefix="$" value={item.cost} onChange={(v) => { const next = structuredClone(settings); next.inverters[index].cost = v; onChange(next); }} /></div>)}</div>
-      </section>
-      <section className="panel standalone">
-        <div className="section-heading"><div><span>C</span><h2>CQ7 battery matrix</h2></div><small>Capacity, cost and STC certificates</small></div>
-        <div className="catalog-table battery"><div className="catalog-head"><span>Capacity</span><span>Cost (excl. GST)</span><span>STC certificates</span></div>{settings.batteries.map((item, index) => <div className="catalog-row" key={item.kwh}><NumberInput compact value={item.kwh} suffix="kWh" onChange={(v) => { const next = structuredClone(settings); next.batteries[index].kwh = v; onChange(next); }} /><NumberInput compact prefix="$" value={item.cost} onChange={(v) => { const next = structuredClone(settings); next.batteries[index].cost = v; onChange(next); }} /><NumberInput compact value={item.certificates} onChange={(v) => { const next = structuredClone(settings); next.batteries[index].certificates = v; onChange(next); }} /></div>)}</div>
-      </section>
+      <CatalogItemPanel letter="B" title="FOX Inverter" catalogKey="inverters" settings={settings} onChange={onChange} />
+      <BatteryCatalogPanel letter="C" title="FOX Battery" catalogKey="batteries" settings={settings} onChange={onChange} />
+    </div>
+    <div className="catalog-split">
+      <CatalogItemPanel letter="D" title="SIG Residential Inverter" catalogKey="sigResidentialInverters" settings={settings} onChange={onChange} showDescription />
+      <BatteryCatalogPanel letter="E" title="SIG Residential Battery" catalogKey="sigResidentialBatteries" settings={settings} onChange={onChange} showDescription />
+    </div>
+    <div className="catalog-split">
+      <CatalogItemPanel letter="F" title="SIG C&I Inverter" catalogKey="sigCiInverters" settings={settings} onChange={onChange} showDescription />
+      <BatteryCatalogPanel letter="G" title="SIG C&I Battery" catalogKey="sigCiBatteries" settings={settings} onChange={onChange} showDescription />
+    </div>
+    <div className="catalog-split">
+      <CatalogItemPanel letter="H" title="SIG Gateway" catalogKey="sigGateways" settings={settings} onChange={onChange} showDescription />
+      <CatalogItemPanel letter="I" title="SIG Accessories" catalogKey="sigAccessories" settings={settings} onChange={onChange} showDescription />
     </div>
   </div>;
+}
+
+function CatalogItemPanel({ letter, title, catalogKey, settings, onChange, showDescription }: {
+  letter: string;
+  title: string;
+  catalogKey: "inverters" | "sigResidentialInverters" | "sigCiInverters" | "sigGateways" | "sigAccessories";
+  settings: AppSettings;
+  onChange: (settings: AppSettings) => void;
+  showDescription?: boolean;
+}) {
+  const items = settings[catalogKey];
+  return <section className="panel standalone">
+    <div className="section-heading"><div><span>{letter}</span><h2>{title}</h2></div><small>{items.length} items · Our Price ex GST</small></div>
+    <div className={`catalog-table ${showDescription ? "described" : ""}`}><div className="catalog-head"><span>Model</span>{showDescription && <span>Description</span>}<span>Our Price (excl. GST)</span></div>{items.map((item, index) => <div className="catalog-row" key={`${catalogKey}-${index}`}><input value={item.name} onChange={(event) => { const next = structuredClone(settings); next[catalogKey][index].name = event.target.value; onChange(next); }} />{showDescription && <input value={item.description ?? ""} onChange={(event) => { const next = structuredClone(settings); next[catalogKey][index].description = event.target.value; onChange(next); }} />}<NumberInput compact prefix="$" value={item.cost} onChange={(value) => { const next = structuredClone(settings); next[catalogKey][index].cost = value; onChange(next); }} /></div>)}</div>
+  </section>;
+}
+
+function BatteryCatalogPanel({ letter, title, catalogKey, settings, onChange, showDescription }: {
+  letter: string;
+  title: string;
+  catalogKey: "batteries" | "sigResidentialBatteries" | "sigCiBatteries";
+  settings: AppSettings;
+  onChange: (settings: AppSettings) => void;
+  showDescription?: boolean;
+}) {
+  const items = settings[catalogKey];
+  return <section className="panel standalone">
+    <div className="section-heading"><div><span>{letter}</span><h2>{title}</h2></div><small>{items.length} items · Capacity, price and STCs</small></div>
+    <div className={`catalog-table battery ${showDescription ? "described" : ""}`}><div className="catalog-head"><span>Model</span>{showDescription && <span>Description</span>}<span>Capacity</span><span>Our Price</span><span>STCs</span></div>{items.map((item, index) => <div className="catalog-row" key={`${catalogKey}-${index}`}><input value={item.name} onChange={(event) => { const next = structuredClone(settings); next[catalogKey][index].name = event.target.value; onChange(next); }} />{showDescription && <input value={item.description ?? ""} onChange={(event) => { const next = structuredClone(settings); next[catalogKey][index].description = event.target.value; onChange(next); }} />}<NumberInput compact value={item.kwh} suffix="kWh" onChange={(value) => { const next = structuredClone(settings); next[catalogKey][index].kwh = value; onChange(next); }} /><NumberInput compact prefix="$" value={item.cost} onChange={(value) => { const next = structuredClone(settings); next[catalogKey][index].cost = value; onChange(next); }} /><NumberInput compact value={item.certificates} onChange={(value) => { const next = structuredClone(settings); next[catalogKey][index].certificates = value; onChange(next); }} /></div>)}</div>
+  </section>;
 }
 
 function UsersPanel({ viewer, users }: { viewer: Viewer; users: UserRow[] }) {

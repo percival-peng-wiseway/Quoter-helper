@@ -61,6 +61,15 @@ test("uses fixed password accounts with secure server-side sessions", async () =
   assert.match(logoutRoute, /logoutCurrentSession/);
   assert.match(quoteTool, /Sign in to continue/);
   assert.match(quoteTool, /Team quotes/);
+  assert.match(quoteTool, /quoteCreatedDateLabel\(quote\.createdAt\)/);
+  assert.match(quoteTool, /<strong>Initiator:<\/strong>/);
+  assert.match(quoteTool, /<strong>Created:<\/strong>/);
+  assert.match(quoteTool, /aria-label="Quote filters"/);
+  assert.match(quoteTool, /All initiators/);
+  assert.match(quoteTool, /Created from/);
+  assert.match(quoteTool, /Created to/);
+  assert.match(quoteTool, /createdDate >= quoteCreatedFrom/);
+  assert.match(quoteTool, /createdDate <= quoteCreatedTo/);
   assert.match(store, /export async function listQuotes\(\)/);
   assert.doesNotMatch(store, /FROM quotes WHERE owner_id = \?/);
   assert.match(store, /export async function deleteQuote[\s\S]*viewer\.role !== "admin"/);
@@ -289,6 +298,106 @@ test("aggregates multiple C&I PV systems, inverter models and battery models", a
   assert.match(transfer, /raw\.ciPvSystems/);
   assert.match(transfer, /raw\.ciInverters/);
   assert.match(transfer, /raw\.ciBatteries/);
+});
+
+test("uses Residential and C&I SIG catalogues with multiple equipment, gateways and accessories", async () => {
+  const { calculateQuote } = await loadTypeScriptModule("lib/calculate.ts");
+  const { setEquipmentBrand, setQuoteMode } = await loadTypeScriptModule("lib/quote-inputs.ts");
+  const settings = {
+    thresholds: { approval: 0.1, target: 0.2 },
+    gstRate: 0.1,
+    solarStcUnitPrice: 0,
+    batteryStcUnitPrice: 10,
+    stcScaleFactor: 0,
+    stcYears: 0,
+    panelBatchWatts: 1000,
+    panelBatchCost: 0,
+    accessoryCostPerKw: 0,
+    solarInstallCostPerKw: 0,
+    batteryInstallCost: 0,
+    deliveryCost: 0,
+    blinkFee: 0,
+    margins: {},
+    inverters: [{ name: "FOX-INV", cost: 1000 }],
+    batteries: [{ name: "FOX-BAT", kwh: 10, certificates: 5, cost: 2000 }],
+    sigResidentialInverters: [{ name: "SIG-RES-INV-A", cost: 3000 }, { name: "SIG-RES-INV-B", cost: 3500 }],
+    sigResidentialBatteries: [{ name: "SIG-RES-BAT", kwh: 8, certificates: 0, cost: 4000 }],
+    sigCiInverters: [{ name: "SIG-CI-INV", cost: 6000 }],
+    sigCiBatteries: [{ name: "SIG-CI-BAT", kwh: 12, certificates: 0, cost: 7000 }],
+    sigGateways: [{ name: "SIG-GATEWAY", cost: 500 }],
+    sigAccessories: [{ name: "SIG-ACCESSORY", cost: 100 }],
+  };
+  const base = {
+    ...defaultQuoteForPvSizeTest(),
+    equipmentBrand: "fox",
+    inverter: "FOX-INV",
+    batteryKwh: 10,
+  };
+  const fox = calculateQuote(base, settings);
+  const sigInputs = setEquipmentBrand(base, "sig", settings);
+  const sig = calculateQuote({
+    ...sigInputs,
+    sigInverters: [
+      { id: "res-inv-a", model: "SIG-RES-INV-A", quantity: 2 },
+      { id: "res-inv-b", model: "SIG-RES-INV-B", quantity: 1 },
+    ],
+    sigBatteries: [{ id: "res-bat", model: "SIG-RES-BAT", quantity: 3 }],
+    sigGateways: [{ id: "gateway", model: "SIG-GATEWAY", quantity: 1 }],
+    sigAccessories: [{ id: "accessory", model: "SIG-ACCESSORY", quantity: 4 }],
+  }, settings);
+  const cost = (result, key) => result.lineItems.find((item) => item.key === key).cost;
+
+  assert.equal(sigInputs.inverter, "SIG-RES-INV-A");
+  assert.equal(sigInputs.batteryKwh, 8);
+  assert.equal(cost(fox, "inverter"), 1000);
+  assert.equal(cost(fox, "battery"), 2000);
+  assert.equal(cost(sig, "inverter"), 9500);
+  assert.equal(cost(sig, "battery"), 12000);
+  assert.equal(cost(sig, "sigGateway"), 500);
+  assert.equal(cost(sig, "sigAccessories"), 400);
+  assert.equal(sig.totalBatteryKwh, 24);
+  assert.equal(sig.batteryCertificates, 0);
+  assert.equal(sig.inverterSummary, "2 × SIG-RES-INV-A; 1 × SIG-RES-INV-B");
+  assert.equal(sig.gatewaySummary, "1 × SIG-GATEWAY");
+  assert.equal(sig.accessoriesSummary, "4 × SIG-ACCESSORY");
+  assert.equal(sig.totalSalesPriceExGst, sig.lineItems.reduce((sum, item) => sum + item.salesPrice, 0));
+
+  const ci = setQuoteMode(sigInputs, "ci", settings);
+  assert.equal(ci.sigInverters[0].model, "SIG-CI-INV");
+  assert.equal(ci.sigBatteries[0].model, "SIG-CI-BAT");
+  assert.equal(cost(calculateQuote({
+    ...ci,
+    sigInverters: [{ id: "ci-inv", model: "SIG-CI-INV", quantity: 3 }],
+    sigBatteries: [{ id: "ci-bat", model: "SIG-CI-BAT", quantity: 2 }],
+  }, settings), "inverter"), 18000);
+  assert.equal(cost(calculateQuote({
+    ...ci,
+    sigInverters: [{ id: "ci-inv", model: "SIG-CI-INV", quantity: 3 }],
+    sigBatteries: [{ id: "ci-bat", model: "SIG-CI-BAT", quantity: 2 }],
+  }, settings), "battery"), 14000);
+
+  const [quoteTool, defaults, model] = await Promise.all([
+    readFile(new URL("app/QuoteTool.tsx", root), "utf8"),
+    readFile(new URL("lib/defaults.ts", root), "utf8"),
+    readFile(new URL("lib/model.ts", root), "utf8"),
+  ]);
+  assert.match(model, /EquipmentBrand = "fox" \| "sig"/);
+  assert.match(defaults, /sigResidentialInverters/);
+  assert.match(defaults, /sigResidentialBatteries/);
+  assert.match(defaults, /sigCiInverters/);
+  assert.match(defaults, /sigCiBatteries/);
+  assert.match(defaults, /sigGateways/);
+  assert.match(defaults, /sigAccessories/);
+  assert.match(quoteTool, /aria-label="Equipment brand"/);
+  assert.match(quoteTool, /title="FOX Inverter"/);
+  assert.match(quoteTool, /title="FOX Battery"/);
+  assert.match(quoteTool, /title="SIG Residential Inverter"/);
+  assert.match(quoteTool, /title="SIG Residential Battery"/);
+  assert.match(quoteTool, /title="SIG C&I Inverter"/);
+  assert.match(quoteTool, /title="SIG C&I Battery"/);
+  assert.match(quoteTool, /title="SIG Gateway"/);
+  assert.match(quoteTool, /title="SIG Accessories"/);
+  assert.match(quoteTool, /Total sales price \(excl\. GST\)/);
 });
 
 test("uses editable per-kW base rates without exposing formulas in the calculator", async () => {

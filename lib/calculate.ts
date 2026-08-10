@@ -7,34 +7,63 @@ export function calculateQuote(
   settings: AppSettings,
 ): CalculationResult {
   const isCiMode = inputs.mode === "ci";
+  const isSig = inputs.equipmentBrand === "sig";
+  const catalogs = isSig
+    ? {
+      inverters: isCiMode ? settings.sigCiInverters : settings.sigResidentialInverters,
+      batteries: isCiMode ? settings.sigCiBatteries : settings.sigResidentialBatteries,
+      gateways: settings.sigGateways,
+      accessories: settings.sigAccessories,
+    }
+    : { inverters: settings.inverters, batteries: settings.batteries, gateways: [], accessories: [] };
   const quantity = (value: number) => Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1;
   const pvSystems = isCiMode && inputs.ciPvSystems?.length
     ? inputs.ciPvSystems.map((item) => ({ sizeKw: Math.max(0, finite(item.sizeKw)), quantity: quantity(item.quantity) }))
     : [{ sizeKw: Math.max(0, finite(inputs.pvSize)), quantity: 1 }];
-  const inverterSelections = isCiMode && inputs.ciInverters?.length
+  const inverterSelections = isSig
+    ? (inputs.sigInverters ?? []).map((item) => ({ model: item.model, quantity: quantity(item.quantity) }))
+    : isCiMode && inputs.ciInverters?.length
     ? inputs.ciInverters.map((item) => ({ model: item.model, quantity: quantity(item.quantity) }))
     : [{ model: inputs.inverter, quantity: 1 }];
-  const batterySelections = isCiMode && inputs.ciBatteries?.length
-    ? inputs.ciBatteries.map((item) => ({ kwh: Math.max(0, finite(item.kwh)), quantity: quantity(item.quantity) }))
-    : [{ kwh: Math.max(0, finite(inputs.batteryKwh)), quantity: 1 }];
+  const batterySelections = isSig
+    ? (inputs.sigBatteries ?? []).map((selection) => {
+      const item = catalogs.batteries.find((candidate) => candidate.name === selection.model);
+      return { model: selection.model, kwh: item?.kwh ?? 0, certificates: item?.certificates ?? 0, cost: item?.cost ?? 0, quantity: quantity(selection.quantity) };
+    })
+    : (isCiMode && inputs.ciBatteries?.length
+      ? inputs.ciBatteries.map((selection) => {
+        const item = catalogs.batteries.find((candidate) => Math.abs(candidate.kwh - selection.kwh) < 0.001);
+        return { model: item?.name ?? "", kwh: Math.max(0, finite(selection.kwh)), certificates: item?.certificates ?? 0, cost: item?.cost ?? 0, quantity: quantity(selection.quantity) };
+      })
+      : [{
+        model: catalogs.batteries.find((candidate) => Math.abs(candidate.kwh - inputs.batteryKwh) < 0.001)?.name ?? "",
+        kwh: Math.max(0, finite(inputs.batteryKwh)),
+        certificates: catalogs.batteries.find((candidate) => Math.abs(candidate.kwh - inputs.batteryKwh) < 0.001)?.certificates ?? 0,
+        cost: catalogs.batteries.find((candidate) => Math.abs(candidate.kwh - inputs.batteryKwh) < 0.001)?.cost ?? 0,
+        quantity: 1,
+      }]);
+  const gatewaySelections = (isSig ? inputs.sigGateways ?? [] : []).map((item) => ({ model: item.model, quantity: quantity(item.quantity) }));
+  const accessorySelections = (isSig ? inputs.sigAccessories ?? [] : []).map((item) => ({ model: item.model, quantity: quantity(item.quantity) }));
   const pvSize = pvSystems.reduce((sum, item) => sum + item.sizeKw * item.quantity, 0);
   const totalBatteryKwh = batterySelections.reduce((sum, item) => sum + item.kwh * item.quantity, 0);
-  const totalBatterySystems = batterySelections.reduce((sum, item) => sum + item.quantity, 0);
+  const totalBatterySystems = batterySelections.reduce((sum, item) => sum + (item.kwh > 0 ? item.quantity : 0), 0);
   const inverterCost = inverterSelections.reduce((sum, selection) => {
-    const item = settings.inverters.find((candidate) => candidate.name === selection.model);
+    const item = catalogs.inverters.find((candidate) => candidate.name === selection.model);
     return sum + (item?.cost ?? 0) * selection.quantity;
   }, 0);
   const batteryCost = batterySelections.reduce((sum, selection) => {
-    const item = settings.batteries.find((candidate) => Math.abs(candidate.kwh - selection.kwh) < 0.001);
-    return sum + (item?.cost ?? 0) * selection.quantity;
+    return sum + selection.cost * selection.quantity;
   }, 0);
   const batteryCertificates = batterySelections.reduce((sum, selection) => {
-    const item = settings.batteries.find((candidate) => Math.abs(candidate.kwh - selection.kwh) < 0.001);
-    return sum + (item?.certificates ?? 0) * selection.quantity;
+    return sum + selection.certificates * selection.quantity;
   }, 0);
+  const gatewayCost = gatewaySelections.reduce((sum, selection) => sum + (catalogs.gateways.find((item) => item.name === selection.model)?.cost ?? 0) * selection.quantity, 0);
+  const sigAccessoriesCost = accessorySelections.reduce((sum, selection) => sum + (catalogs.accessories.find((item) => item.name === selection.model)?.cost ?? 0) * selection.quantity, 0);
   const pvSummary = pvSystems.map((item) => `${item.quantity} × ${item.sizeKw} kW`).join("; ");
   const inverterSummary = inverterSelections.map((item) => `${item.quantity} × ${item.model || "Unselected"}`).join("; ");
-  const batterySummary = batterySelections.map((item) => `${item.quantity} × ${item.kwh} kWh`).join("; ");
+  const batterySummary = batterySelections.map((item) => `${item.quantity} × ${isSig ? item.model || `${item.kwh} kWh` : `${item.kwh} kWh`}`).join("; ");
+  const gatewaySummary = gatewaySelections.map((item) => `${item.quantity} × ${item.model}`).join("; ");
+  const accessoriesSummary = accessorySelections.map((item) => `${item.quantity} × ${item.model}`).join("; ");
   const panelCost = pvSystems.reduce((sum, item) => sum + settings.panelBatchCost * Math.ceil((item.sizeKw * 1000) / settings.panelBatchWatts) * item.quantity, 0);
   const manualCost = (key: keyof QuoteInputs["manualCosts"], fallback: number) => {
     const override = inputs.manualCosts?.[key];
@@ -49,13 +78,15 @@ export function calculateQuote(
     backup: manualCost("backup", 0),
     accessories: manualCost("accessories", pvSize * settings.accessoryCostPerKw),
     solarInstallation: manualCost("solarInstallation", pvSize * settings.solarInstallCostPerKw),
-    batteryInstallation: manualCost("batteryInstallation", settings.batteryInstallCost * (isCiMode ? totalBatterySystems : 1)),
+    batteryInstallation: manualCost("batteryInstallation", settings.batteryInstallCost * (isCiMode || isSig ? totalBatterySystems : 1)),
     delivery: manualCost("delivery", settings.deliveryCost),
     acCable: manualCost("acCable", 0),
     blinkFee: manualCost("blinkFee", settings.blinkFee),
     switchboard: manualCost("switchboard", 0),
     subSwitchboard: manualCost("subSwitchboard", 0),
     externalCommission: manualCost("externalCommission", 0),
+    sigGateway: gatewayCost,
+    sigAccessories: sigAccessoriesCost,
   };
 
   const definitions: Array<[keyof typeof costs, string, boolean, string?]> = [
@@ -73,6 +104,12 @@ export function calculateQuote(
     ["subSwitchboard", "sub switchboard", true],
     ["externalCommission", "External Commission incl. GST", true],
   ];
+  if (isSig) {
+    definitions.splice(3, 0,
+      ["sigGateway", "SIG Gateway", false],
+      ["sigAccessories", "SIG Accessories", false],
+    );
+  }
 
   const marginFor = (key: keyof typeof costs) => {
     const override = isCiMode ? inputs.manualMargins?.[key] : undefined;
@@ -80,12 +117,13 @@ export function calculateQuote(
       ? Math.max(0, override)
       : Math.max(0, settings.margins[key] ?? 0);
   };
-  const notes: Partial<Record<keyof typeof costs, string>> = isCiMode ? {
-    solarPanel: pvSummary,
-    inverter: inverterSummary,
-    battery: batterySummary,
-    batteryInstallation: `${totalBatterySystems} battery system${totalBatterySystems === 1 ? "" : "s"}`,
-  } : {};
+  const notes: Partial<Record<keyof typeof costs, string>> = {
+    ...(isCiMode ? { solarPanel: pvSummary } : {}),
+    ...(isCiMode || isSig ? { inverter: inverterSummary, battery: batterySummary } : {}),
+    ...(isSig && gatewaySummary ? { sigGateway: gatewaySummary } : {}),
+    ...(isSig && accessoriesSummary ? { sigAccessories: accessoriesSummary } : {}),
+    ...(isCiMode || isSig ? { batteryInstallation: `${totalBatterySystems} battery module${totalBatterySystems === 1 ? "" : "s"}` } : {}),
+  };
   const standardLineItems: LineItemResult[] = definitions.map(([key, label, editableByUser, note]) => {
     const margin = marginFor(key);
     return {
@@ -169,6 +207,8 @@ export function calculateQuote(
     pvSummary,
     inverterSummary,
     batterySummary,
+    gatewaySummary,
+    accessoriesSummary,
     solarCertificates,
     solarStc,
     batteryCertificates,
@@ -180,6 +220,7 @@ export function calculateQuote(
     gstRefund,
     lineItemCostTotal: sumAllCosts - customerDeductions,
     lineItemSalesTotal: sumAllSales - customerDeductions,
+    totalSalesPriceExGst: sumAllSales,
     grossMargin,
     grossMarginRate,
     quoteRequiredBalance,

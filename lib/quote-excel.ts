@@ -7,7 +7,7 @@ const SUMMARY_SHEET = "Summary";
 const INSTRUCTIONS_SHEET = "Instructions";
 
 const headers = [
-  "Status", "Customer Name", "Date", "Mode", "Phone", "Address", "E3 Energy Initiator",
+  "Status", "Customer Name", "Date", "Mode", "Equipment Brand", "Phone", "Address", "E3 Energy Initiator",
   "PV System Size (kW)", "Battery Size (kWh)", "Inverter", "Customer Balance (incl. GST)",
   "Solar VIC Rebate", "Solar VIC Interest Free Loan", "Discount", "Solar STC (Manual)",
   "Battery STC (Manual)", "Manual Costs JSON", "Manual Margins JSON", "Custom Items JSON",
@@ -57,12 +57,13 @@ export function createQuotesWorkbook(quotes: QuoteRecord[], settings: AppSetting
       "Customer Name": quote.payload.customerName,
       "Date": quote.payload.date,
       "Mode": quote.payload.mode === "ci" ? "C&I" : "Residential",
+      "Equipment Brand": quote.payload.equipmentBrand === "sig" ? "SIG" : "FOX",
       "Phone": quote.payload.phone,
       "Address": quote.payload.address,
       "E3 Energy Initiator": quote.payload.initiator,
       "PV System Size (kW)": result.totalPvSize,
       "Battery Size (kWh)": result.totalBatteryKwh,
-      "Inverter": quote.payload.mode === "ci" ? result.inverterSummary : quote.payload.inverter,
+      "Inverter": quote.payload.mode === "ci" || quote.payload.equipmentBrand === "sig" ? result.inverterSummary : quote.payload.inverter,
       "Customer Balance (incl. GST)": quote.payload.customerBalance,
       "Solar VIC Rebate": quote.payload.solarVicRebate,
       "Solar VIC Interest Free Loan": quote.payload.solarVicLoan,
@@ -216,7 +217,7 @@ function createProjectSheet(
     ["Phone", quote.payload.phone, "", "Owner", quote.ownerName],
     ["Quote Type", quote.payload.mode === "ci" ? "C&I" : "Residential", "", "Initiator", quote.payload.initiator],
     ["PV System Size", result.totalPvSize, "kW", "Battery Size", result.totalBatteryKwh, "kWh"],
-    ["Inverter", quote.payload.mode === "ci" ? result.inverterSummary : quote.payload.inverter],
+    ["Inverter", quote.payload.mode === "ci" || quote.payload.equipmentBrand === "sig" ? result.inverterSummary : quote.payload.inverter, "", "Equipment Brand", quote.payload.equipmentBrand === "sig" ? "SIG" : "FOX"],
     [],
     ["Quote Breakdown"],
     ["Item", "Cost", "Margin", "Sales Price", "Notes"],
@@ -542,6 +543,7 @@ function mappedPayload(get: (...names: string[]) => unknown, customerName: strin
     customerName,
     date: asText(get("Date", "Quote Date")),
     mode: mode === "ci" || mode === "commercialindustrial" ? "ci" : "residential",
+    equipmentBrand: normalizeHeader(get("Equipment Brand", "Brand")) === "sig" ? "sig" : "fox",
     phone: asText(get("Phone", "Phone Number", "Mobile")),
     address: asText(get("Address", "Project Address", "Installation Address")),
     initiator: asText(get("E3 Energy Initiator", "Initiator", "Owner")),
@@ -592,7 +594,7 @@ function columnWidth(header: string) {
 }
 
 const knownLabels = new Set([
-  "customername", "customer", "name", "date", "quotedate", "mode", "quotemode", "phone", "phonenumber", "mobile",
+  "customername", "customer", "name", "date", "quotedate", "mode", "quotemode", "equipmentbrand", "brand", "phone", "phonenumber", "mobile",
   "address", "projectaddress", "installationaddress", "e3energyinitiator", "initiator", "owner", "pvsystemsizekw",
   "pvsystemsize", "pvsize", "solarsize", "solar", "batterysizekwh", "batterysize", "battery", "inverter", "invertermodel",
   "customerbalanceinclgst", "customerbalance", "solarvicrebate", "solarvicinterestfreeloan", "solarvicloan",
