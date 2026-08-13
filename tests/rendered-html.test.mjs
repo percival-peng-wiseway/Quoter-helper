@@ -66,6 +66,9 @@ test("uses fixed password accounts with secure server-side sessions", async () =
   assert.match(quoteTool, /<strong>Created:<\/strong>/);
   assert.match(quoteTool, /aria-label="Quote filters"/);
   assert.match(quoteTool, /All initiators/);
+  assert.match(quoteTool, /All statuses/);
+  assert.match(quoteTool, /quote\.status === quoteStatusFilter/);
+  assert.match(quoteTool, /setQuoteStatusFilter\(""\)/);
   assert.match(quoteTool, /Created from/);
   assert.match(quoteTool, /Created to/);
   assert.match(quoteTool, /createdDate >= quoteCreatedFrom/);

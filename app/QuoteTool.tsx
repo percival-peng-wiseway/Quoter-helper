@@ -69,6 +69,7 @@ export function QuoteTool() {
   const [tab, setTab] = useState<Tab>("quote");
   const [quoteSearch, setQuoteSearch] = useState("");
   const [quoteInitiatorFilter, setQuoteInitiatorFilter] = useState("");
+  const [quoteStatusFilter, setQuoteStatusFilter] = useState<QuoteStatus | "">("");
   const [quoteCreatedFrom, setQuoteCreatedFrom] = useState("");
   const [quoteCreatedTo, setQuoteCreatedTo] = useState("");
   const [statusBusyId, setStatusBusyId] = useState("");
@@ -145,13 +146,15 @@ export function QuoteTool() {
       const createdDate = quoteCreatedDateKey(quote.createdAt);
       const matchesCreatedFrom = !quoteCreatedFrom || Boolean(createdDate && createdDate >= quoteCreatedFrom);
       const matchesCreatedTo = !quoteCreatedTo || Boolean(createdDate && createdDate <= quoteCreatedTo);
-      return matchesSearch && matchesInitiator && matchesCreatedFrom && matchesCreatedTo;
+      const matchesStatus = !quoteStatusFilter || quote.status === quoteStatusFilter;
+      return matchesSearch && matchesInitiator && matchesCreatedFrom && matchesCreatedTo && matchesStatus;
     });
-  }, [quoteCreatedFrom, quoteCreatedTo, quoteInitiatorFilter, quoteSearch, session?.quotes]);
-  const hasHistoryFilters = Boolean(quoteSearch || quoteInitiatorFilter || quoteCreatedFrom || quoteCreatedTo);
+  }, [quoteCreatedFrom, quoteCreatedTo, quoteInitiatorFilter, quoteSearch, quoteStatusFilter, session?.quotes]);
+  const hasHistoryFilters = Boolean(quoteSearch || quoteInitiatorFilter || quoteStatusFilter || quoteCreatedFrom || quoteCreatedTo);
   const clearHistoryFilters = () => {
     setQuoteSearch("");
     setQuoteInitiatorFilter("");
+    setQuoteStatusFilter("");
     setQuoteCreatedFrom("");
     setQuoteCreatedTo("");
   };
@@ -761,12 +764,17 @@ export function QuoteTool() {
                     {initiatorOptions.map((initiator) => <option key={initiator} value={initiator}>{initiator}</option>)}
                     <option value="__none__">No initiator</option>
                   </select></label>
+                  <label><span>Status</span><select value={quoteStatusFilter} onChange={(event) => setQuoteStatusFilter(event.target.value as QuoteStatus | "")}>
+                    <option value="">All statuses</option>
+                    <option value="drafting">Drafting</option>
+                    <option value="done">Done</option>
+                  </select></label>
                   <label><span>Created from</span><input type="date" value={quoteCreatedFrom} max={quoteCreatedTo || undefined} onChange={(event) => setQuoteCreatedFrom(event.target.value)} /></label>
                   <label><span>Created to</span><input type="date" value={quoteCreatedTo} min={quoteCreatedFrom || undefined} onChange={(event) => setQuoteCreatedTo(event.target.value)} /></label>
                   <div className="history-filter-summary"><span>Showing <b>{filteredQuotes.length}</b> of {session.quotes.length}</span><button type="button" disabled={!hasHistoryFilters} onClick={clearHistoryFilters}>Clear filters</button></div>
                 </div>
                 {filteredQuotes.length === 0 ? (
-                  <div className="empty search-empty"><span>⌕</span><h3>No matching quotes</h3><p>Try another search, Initiator or creation date range.</p></div>
+                  <div className="empty search-empty"><span>⌕</span><h3>No matching quotes</h3><p>Try another search, Initiator, status or creation date range.</p></div>
                 ) : (
                   <div className="history-list">{filteredQuotes.map((quote) => {
                     const calculated = calculateQuote(quote.payload, settings);

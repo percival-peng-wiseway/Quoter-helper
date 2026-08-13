@@ -212,7 +212,7 @@ select:disabled { border-color: #d9e0db; background: #f3f6f4; color: #87938b; cu
 .history-search input { height: 50px; padding: 0 76px 0 44px; border-color: #d3dcd5; background: #f9fbfa; font-size: 15px; }
 .history-search button { position: absolute; right: 8px; height: 34px; padding: 0 11px; border: 0; border-radius: 6px; background: #ecefec; color: #606963; font-size: 12px; font-weight: 700; }
 .history-search button:hover { background: #e2e6e2; }
-.history-filter-bar { display: grid; grid-template-columns: minmax(180px, 1.1fr) repeat(2, minmax(155px, .75fr)) minmax(190px, auto); align-items: end; gap: 12px; margin-bottom: 12px; padding: 12px; border: 1px solid #dce4de; border-radius: 10px; background: #f7faf8; }
+.history-filter-bar { display: grid; grid-template-columns: minmax(165px, 1fr) minmax(125px, .65fr) repeat(2, minmax(145px, .75fr)) minmax(180px, auto); align-items: end; gap: 12px; margin-bottom: 12px; padding: 12px; border: 1px solid #dce4de; border-radius: 10px; background: #f7faf8; }
 .history-filter-bar > label { display: grid; gap: 5px; min-width: 0; }
 .history-filter-bar > label > span { color: #68766d; font-size: 10px; font-weight: 820; letter-spacing: .055em; text-transform: uppercase; }
 .history-filter-bar select, .history-filter-bar input { height: 38px; border-color: #ced9d1; background: #fff; font-size: 12px; }
