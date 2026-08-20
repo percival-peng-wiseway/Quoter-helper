@@ -4,10 +4,10 @@ import { deleteQuote, requireViewer, saveQuote, updateQuoteStatus } from "../../
 export async function POST(request: Request) {
   try {
     const viewer = await requireViewer();
-    const body = await request.json() as { id?: string | null; payload?: QuoteInputs };
+    const body = await request.json() as { id?: string | null; payload?: QuoteInputs; allowDuplicate?: boolean };
     if (!body.payload) return Response.json({ error: "Quote inputs are required" }, { status: 400 });
     if (!body.payload.customerName?.trim()) return Response.json({ error: "Need a Customer Name" }, { status: 400 });
-    const id = await saveQuote(viewer, body.id ?? null, body.payload);
+    const id = await saveQuote(viewer, body.id ?? null, body.payload, body.allowDuplicate === true);
     return Response.json({ id });
   } catch (error) {
     if (error instanceof Response) return error;

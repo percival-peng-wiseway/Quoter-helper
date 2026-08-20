@@ -219,10 +219,22 @@ export async function listQuotes(): Promise<QuoteRecord[]> {
   }));
 }
 
-export async function saveQuote(viewer: Viewer, id: string | null, payload: QuoteInputs): Promise<string> {
+export async function saveQuote(viewer: Viewer, id: string | null, payload: QuoteInputs, allowDuplicate = false): Promise<string> {
   const customerName = payload.customerName.trim();
   if (!customerName) throw Response.json({ error: "Need a Customer Name" }, { status: 400 });
   const quoteId = id ?? crypto.randomUUID();
+  if (!allowDuplicate) {
+    const duplicate = await getRawDb().prepare(`SELECT id FROM quotes
+      WHERE LOWER(TRIM(project_name)) = LOWER(?) AND id <> ? LIMIT 1`)
+      .bind(customerName, quoteId)
+      .first<{ id: string }>();
+    if (duplicate) {
+      throw Response.json({
+        error: "A quote with this Customer Name already exists.",
+        duplicate: true,
+      }, { status: 409 });
+    }
+  }
   const projectName = customerName;
   await getRawDb().prepare(`INSERT INTO quotes (id, owner_id, project_name, payload)
     VALUES (?, ?, ?, ?)

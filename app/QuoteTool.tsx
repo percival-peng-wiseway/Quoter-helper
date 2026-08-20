@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { calculateQuote } from "../lib/calculate";
+import { calculateQuote, requiredCustomerBalanceForMargin } from "../lib/calculate";
 import { defaultQuote } from "../lib/defaults";
 import type { AppSettings, CatalogItem, CiBatterySelection, CiInverterSelection, CiPvSystem, EquipmentSelection, QuoteInputs, QuoteRecord, QuoteStatus, Role, SystemNotification, Viewer } from "../lib/model";
 import { getEquipmentCatalogs, normalizeQuoteConfiguration, setEquipmentBrand as applyEquipmentBrand, setQuoteMode, syncCiLegacyFields, updatePvSize } from "../lib/quote-inputs";
@@ -72,6 +72,7 @@ export function QuoteTool() {
   const [quoteStatusFilter, setQuoteStatusFilter] = useState<QuoteStatus | "">("");
   const [quoteCreatedFrom, setQuoteCreatedFrom] = useState("");
   const [quoteCreatedTo, setQuoteCreatedTo] = useState("");
+  const [marginSlider, setMarginSlider] = useState(17.5);
   const [statusBusyId, setStatusBusyId] = useState("");
   const [quoteTransferBusy, setQuoteTransferBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -309,6 +310,11 @@ export function QuoteTool() {
     setInputs((current) => ({ ...current, customItems: (current.customItems ?? []).filter((item) => item.id !== id) }));
   };
   const applyMarginBalance = (value: number) => setField("customerBalance", Math.round(value * 100) / 100);
+  const applyMarginSlider = (value: number) => {
+    setMarginSlider(value);
+    if (!result) return;
+    applyMarginBalance(requiredCustomerBalanceForMargin(result, settings!.gstRate, value / 100));
+  };
 
   const flash = (text: string) => {
     setMessage(text);
@@ -350,7 +356,7 @@ export function QuoteTool() {
     }
   };
 
-  const saveQuote = async () => {
+  const saveQuote = async (saveAsNew = false) => {
     if (!inputs.customerName.trim()) {
       flash("Need a Customer Name");
       document.getElementById("customer-name")?.focus();
@@ -358,16 +364,25 @@ export function QuoteTool() {
     }
     setBusy(true);
     try {
-      const response = await fetch("/api/quotes", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: quoteId, payload: inputs }),
-      });
-      const data = await response.json() as { id?: string; error?: string };
+      const sendSaveRequest = async (allowDuplicate = false) => {
+        const response = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: saveAsNew ? null : quoteId, payload: inputs, allowDuplicate }),
+        });
+        const data = await response.json() as { id?: string; error?: string; duplicate?: boolean };
+        return { response, data };
+      };
+      let { response, data } = await sendSaveRequest();
+      if (response.status === 409 && data.duplicate) {
+        const shouldContinue = window.confirm(`${data.error}\n\nDo you want to save it anyway?`);
+        if (!shouldContinue) return;
+        ({ response, data } = await sendSaveRequest(true));
+      }
       if (!response.ok || !data.id) throw new Error(data.error ?? "Unable to save quote");
       setQuoteId(data.id);
       await loadSession();
-      flash("Quote saved");
+      flash(saveAsNew ? "Saved as a new quote" : "Quote saved");
     } catch (error) {
       flash(error instanceof Error ? error.message : "Unable to save quote");
     } finally {
@@ -590,7 +605,8 @@ export function QuoteTool() {
             </div>}
             <button className="ghost-btn mobile-hide" onClick={() => { setInputs(freshQuote()); setQuoteId(null); }}>Reset</button>
             <button className="ghost-btn" disabled={busy} onClick={() => void signOut()}>Sign out</button>
-            {tab === "quote" && <button className="primary-btn" disabled={busy} onClick={saveQuote}>{busy ? "Saving…" : "Save quote"}</button>}
+            {tab === "quote" && quoteId && <button className="ghost-btn save-as-new-btn" disabled={busy} onClick={() => void saveQuote(true)}>{busy ? "Saving…" : "Save as new"}</button>}
+            {tab === "quote" && <button className="primary-btn" disabled={busy} onClick={() => void saveQuote()}>{busy ? "Saving…" : "Save quote"}</button>}
             {tab === "settings" && isAdmin && <button className="primary-btn" disabled={busy} onClick={saveSettings}>{busy ? "Publishing…" : "Publish changes"}</button>}
           </div>
         </header>
@@ -703,9 +719,12 @@ export function QuoteTool() {
                         <Field label="Discount"><NumberInput prefix="$" value={inputs.discount} onChange={(v) => setField("discount", Math.max(0, v))} /></Field>
                         <Field label="Customer balance (incl. GST)"><NumberInput prefix="$" value={inputs.customerBalance} onChange={(v) => setField("customerBalance", v)} /></Field>
                       </div>
-                      {!isCiMode && <div className="quick-margin-buttons funding-quick-margins">
-                        <button type="button" onClick={() => applyMarginBalance(result.margin20RequiredBalance)}><b>20% Margin</b><span>{money.format(result.margin20RequiredBalance)}</span></button>
-                        <button type="button" onClick={() => applyMarginBalance(result.margin15RequiredBalance)}><b>15% Margin</b><span>{money.format(result.margin15RequiredBalance)}</span></button>
+                      {!isCiMode && <div className="margin-pricing-controls funding-quick-margins">
+                        <div className="margin-slider-card">
+                          <div className="margin-slider-heading"><div><small>Target margin</small><b>{marginSlider.toFixed(1)}%</b></div><div><small>Customer balance</small><strong>{money.format(requiredCustomerBalanceForMargin(result, settings.gstRate, marginSlider / 100))}</strong></div></div>
+                          <input type="range" min="15" max="30" step="0.5" value={marginSlider} style={{ "--margin-progress": `${(marginSlider - 15) / 15 * 100}%` } as React.CSSProperties} aria-label="Target margin from 15 to 30 percent" onChange={(event) => applyMarginSlider(num(event.target.value))} />
+                          <div className="margin-slider-labels"><span>15%</span><span>30%</span></div>
+                        </div>
                       </div>}
                     </div>
                   </div>

@@ -50,6 +50,8 @@ test("uses fixed password accounts with secure server-side sessions", async () =
   assert.match(auth, /username: "sam"[\s\S]*role: "user"/);
   assert.match(auth, /username: "ruihan"[\s\S]*role: "user"/);
   assert.match(auth, /username: "kevin"[\s\S]*role: "user"/);
+  assert.match(auth, /username: "daniel"[\s\S]*role: "user"/);
+  assert.match(auth, /username: "wendy"[\s\S]*role: "user"/);
   assert.match(auth, /username: "hogan"[\s\S]*role: "admin"/);
   assert.match(auth, /username: "admin"[\s\S]*role: "admin"/);
   assert.match(auth, /PBKDF2_ITERATIONS = 100_000/);
@@ -84,6 +86,16 @@ test("uses fixed password accounts with secure server-side sessions", async () =
   assert.match(store, /Need a Customer Name/);
   assert.match(quoteTool, /flash\("Need a Customer Name"\)/);
   assert.match(quoteTool, /id="customer-name" required/);
+  assert.match(quoteTool, /Save as new/);
+  assert.match(quoteTool, /id: saveAsNew \? null : quoteId/);
+  assert.match(quoteTool, /Saved as a new quote/);
+  assert.match(quoteTool, /type="range" min="15" max="30" step="0\.5"/);
+  assert.match(quoteTool, /--margin-progress/);
+  assert.match(quoteTool, /requiredCustomerBalanceForMargin\(result, settings\.gstRate, marginSlider \/ 100\)/);
+  assert.match(quoteTool, /Do you want to save it anyway\?/);
+  assert.match(quotesRoute, /body\.allowDuplicate === true/);
+  assert.match(store, /LOWER\(TRIM\(project_name\)\) = LOWER\(\?\)/);
+  assert.match(store, /duplicate: true/);
   assert.match(migration, /CREATE TABLE `auth_sessions`/);
   assert.match(migration, /CREATE TABLE `login_attempts`/);
   assert.doesNotMatch(auth, /password:\s*["']/i);
@@ -215,7 +227,7 @@ test("supports per-quote C&I margins and manual STC funding", async () => {
   assert.match(quoteTool, /setManualMargin\(item\.key/);
   assert.match(quoteTool, /manualSolarStc/);
   assert.match(quoteTool, /manualBatteryStc/);
-  assert.match(quoteTool, /!isCiMode && <div className="quick-margin-buttons funding-quick-margins">/);
+  assert.match(quoteTool, /!isCiMode && <div className="margin-pricing-controls funding-quick-margins">/);
   assert.match(quoteTool, /quote\.payload\.mode === "ci"/);
   assert.match(quoteTool, /className="ci-badge"/);
   assert.doesNotMatch(quoteTool, /quote-total-chips/);

@@ -2,6 +2,18 @@ import type { AppSettings, CalculationResult, LineItemResult, QuoteInputs } from
 
 const finite = (value: number) => (Number.isFinite(value) ? value : 0);
 
+export function requiredCustomerBalanceForMargin(
+  basis: Pick<CalculationResult, "totalCostExGst" | "gstRefund" | "receivedFundingTotal">,
+  gstRate: number,
+  target: number,
+): number {
+  const denominator = 1 - gstRate - target;
+  const numerator = (1 + gstRate) * (
+    basis.totalCostExGst - basis.gstRefund - basis.receivedFundingTotal * (1 - target)
+  );
+  return denominator <= 0 ? 0 : Math.max(0, numerator / denominator);
+}
+
 export function calculateQuote(
   inputs: QuoteInputs,
   settings: AppSettings,
@@ -182,13 +194,8 @@ export function calculateQuote(
   const grossMargin = totalReceivedExGst - totalCostExGst - netGst;
   const grossMarginRate = totalReceivedExGst === 0 ? 0 : grossMargin / totalReceivedExGst;
 
-  const requiredBalanceForMargin = (target: number) => {
-    const denominator = 1 - settings.gstRate - target;
-    const numerator = (1 + settings.gstRate) * (
-      totalCostExGst - gstRefund - receivedFundingTotal * (1 - target)
-    );
-    return denominator <= 0 ? 0 : Math.max(0, numerator / denominator);
-  };
+  const marginBasis = { totalCostExGst, gstRefund, receivedFundingTotal };
+  const requiredBalanceForMargin = (target: number) => requiredCustomerBalanceForMargin(marginBasis, settings.gstRate, target);
   const targetRequiredBalance = requiredBalanceForMargin(settings.thresholds.target);
   const margin15RequiredBalance = requiredBalanceForMargin(0.15);
   const margin20RequiredBalance = requiredBalanceForMargin(0.2);
@@ -218,6 +225,7 @@ export function calculateQuote(
     netGst,
     gstPayment,
     gstRefund,
+    receivedFundingTotal,
     lineItemCostTotal: sumAllCosts - customerDeductions,
     lineItemSalesTotal: sumAllSales - customerDeductions,
     totalSalesPriceExGst: sumAllSales,
